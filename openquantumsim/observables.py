@@ -538,7 +538,7 @@ def _sqrt_psd(matrix: Array) -> Array:
 
 def _hermitian_part(matrix: Array) -> Array:
     array = np.asarray(matrix, dtype=np.complex128)
-    return cast(Array, 0.5 * (array + array.conj().T))
+    return np.asarray(0.5 * (array + array.conj().T), dtype=np.complex128)
 
 
 def _check_same_shape(left: Array, right: Array) -> None:

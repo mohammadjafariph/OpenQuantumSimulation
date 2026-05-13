@@ -133,12 +133,17 @@ jobs:
         run: |
           python -m pip install --no-deps --target /tmp/oqs-wheel-install dist/openquantumsim-*.whl
           python - <<'PY'
-          import sys
-          sys.path.insert(0, "/tmp/oqs-wheel-install")
+          import importlib.util
+          from pathlib import Path
 
-          from openquantumsim._julia_bridge import backend_path
+          module_path = Path("/tmp/oqs-wheel-install/openquantumsim/_julia_bridge.py")
+          spec = importlib.util.spec_from_file_location("oqs_julia_bridge", module_path)
+          if spec is None or spec.loader is None:
+              raise SystemExit(f"could not load {module_path}")
+          bridge = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(bridge)
 
-          path = backend_path()
+          path = bridge.backend_path()
           assert str(path).startswith("/tmp/oqs-wheel-install/"), path
           assert (path / "Project.toml").is_file()
           assert (path / "src" / "OpenQuantumSimJL.jl").is_file()

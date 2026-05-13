@@ -126,7 +126,7 @@ def _coherent_grid(alpha: Array, dim: int) -> Array:
 def _density_matrix(state: Array) -> Array:
     array = np.asarray(state, dtype=np.complex128)
     if array.ndim == 1:
-        return np.outer(array, array.conj())
+        return np.asarray(np.outer(array, array.conj()), dtype=np.complex128)
     if array.ndim != 2 or array.shape[0] != array.shape[1]:
         msg = "state must be a ket vector or square density matrix."
         raise ValueError(msg)

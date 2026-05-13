@@ -327,7 +327,7 @@ def dicke_state(space: DickeSpace, excitations: int) -> Array:
 def ket2dm(ket: Array) -> Array:
     """Convert a ket to a density matrix."""
     vector = np.asarray(ket, dtype=np.complex128).reshape(-1)
-    return np.outer(vector, vector.conj())
+    return np.asarray(np.outer(vector, vector.conj()), dtype=np.complex128)
 
 
 def coherent(space_or_dim: FockSpace | int, alpha: complex) -> Array:

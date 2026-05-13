@@ -104,11 +104,11 @@ class TimeDependentHamiltonian:
 
     def to_numpy(self, t: float) -> Array:
         """Evaluate ``H(t)`` as a dense NumPy matrix."""
-        data = self.base.to_numpy().copy()
+        data = np.asarray(self.base.to_numpy().copy(), dtype=np.complex128)
         for term in self.terms:
             coefficient = _evaluate_coefficient(term.coefficient, t)
             data += coefficient * term.operator.to_numpy()
-        return cast(Array, data)
+        return data
 
     def at(self, t: float) -> Operator:
         """Evaluate ``H(t)`` and return it as an :class:`Operator`."""

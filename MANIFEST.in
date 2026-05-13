@@ -1,0 +1,7 @@
+include LICENSE
+include README.md
+include CITATION.cff
+include CHANGELOG.md
+include CONTRIBUTING.md
+recursive-include openquantumsim/julia/OpenQuantumSimJL *.jl *.toml
+include openquantumsim/py.typed

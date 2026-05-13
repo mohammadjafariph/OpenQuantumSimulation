@@ -1,0 +1,30 @@
+.DS_Store
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+.venv/
+venv/
+/Project.toml
+
+# Julia
+Manifest.toml
+!src/OpenQuantumSimJL/Manifest.toml
+!openquantumsim/julia/OpenQuantumSimJL/Manifest.toml
+LocalPreferences.toml
+*.ji
+*.cov
+
+# Simulation outputs
+*.h5
+*.hdf5
+*.jld2
+checkpoints/
+runs/
+qutip_coeffs_*/

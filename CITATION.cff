@@ -1,0 +1,17 @@
+cff-version: 1.2.0
+message: "If you use OpenQuantumSim, please cite the software release."
+title: "OpenQuantumSim"
+version: "0.1.0-alpha"
+abstract: "Python-accessible, Julia-powered simulation tools for open quantum systems."
+authors:
+  - family-names: "Jafari"
+    given-names: "Mohammad"
+license: "MIT"
+repository-code: "https://github.com/mohammadjafariph/OpenQuantumSimulation"
+keywords:
+  - "open quantum systems"
+  - "Lindblad equation"
+  - "Monte Carlo wave function"
+  - "quantum trajectories"
+  - "Julia"
+  - "Python"

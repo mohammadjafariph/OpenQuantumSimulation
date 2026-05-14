@@ -45,7 +45,7 @@ jobs:
     name: Python-Julia physics tests
     runs-on: ubuntu-latest
     env:
-      PYTHON_JULIACALL_EXE: julia
+      PYTHON_JULIAPKG_EXE: julia
       PYTHON_JULIACALL_HANDLE_SIGNALS: yes
 
     steps:

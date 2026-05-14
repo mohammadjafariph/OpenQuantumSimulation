@@ -17,6 +17,7 @@ REQUIRED_FILES = [
     "CONTRIBUTING.md",
     "MANIFEST.in",
     "pyproject.toml",
+    ".github/workflows/release.yml",
     "openquantumsim/py.typed",
     "docs/release_checklist.md",
     "scripts/check_wheel_install.py",

@@ -3,9 +3,11 @@
 All notable changes to OpenQuantumSim will be documented here.
 
 The project follows semantic versioning once the public API reaches `0.1.0`.
-Until then, entries are grouped under `Unreleased`.
+Until then, entries are grouped under alpha releases.
 
 ## Unreleased
+
+## 0.1.0a0 - 2026-05-14
 
 - Added a Python frontend and Julia backend package scaffold.
 - Added dense Hilbert-space, state, and operator helpers.

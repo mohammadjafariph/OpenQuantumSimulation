@@ -6,9 +6,12 @@ green. This file is the standing answer to: "Is it ready to publish yet?"
 ## Current Status
 
 Status: public alpha release candidate. The public alpha and public beta gates
-are green, and local release artifacts for `v0.1.0a0` have passed smoke tests.
+are green, `v0.1.0a0` is tagged, and local release artifacts have passed smoke
+tests.
 
-Latest green public CI: run #10 on commit `a14d27e`, completed on 2026-05-14.
+Release tag: `v0.1.0a0` on commit `ebf41f5`.
+Latest green public CI for the release commit: run #11 on commit `ebf41f5`,
+completed on 2026-05-14.
 Latest local artifact check: wheel/sdist build, `twine check`, and installed
 wheel Julia-backend smoke test passed on 2026-05-14.
 
@@ -28,6 +31,7 @@ wheel Julia-backend smoke test passed on 2026-05-14.
 - [x] API reference generated from docstrings.
 - [x] Version, repository URL, and citation metadata confirmed against the
       actual public repository.
+- [x] GitHub release workflow configured for tagged distribution builds.
 
 ## Public Beta Gate
 
@@ -53,3 +57,15 @@ julia --project=src/OpenQuantumSimJL -e 'using Pkg; Pkg.test()'
 python -m build --outdir dist
 python -m twine check dist/*
 ```
+
+## Release Workflow
+
+Tagged versions are built by `.github/workflows/release.yml`. The workflow
+builds the source distribution and wheel, runs `twine check`, uploads the
+artifacts to the GitHub release, and can be manually dispatched for an existing
+tag.
+
+PyPI publishing is intentionally manual-gated: run the release workflow from
+GitHub Actions with `publish_target=testpypi` first, verify installation from
+TestPyPI, then rerun it with `publish_target=pypi` after trusted publishing is
+configured for the repository.

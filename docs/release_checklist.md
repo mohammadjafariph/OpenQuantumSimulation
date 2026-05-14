@@ -5,10 +5,10 @@ green. This file is the standing answer to: "Is it ready to publish yet?"
 
 ## Current Status
 
-Status: not ready for public alpha.
+Status: public alpha candidate; not ready for public beta.
 
-The package is past the toy-project stage, but it still needs install and
-validation hardening before strangers should depend on it.
+The public alpha gate is green. Before a broader beta release, the package
+still needs a fresh-machine quickstart test and follow-up optimization work.
 
 ## Public Alpha Gate
 
@@ -33,7 +33,7 @@ validation hardening before strangers should depend on it.
       diagnostics that reduce to linear expectations or pure-trajectory
       constants.
 - [x] QuTiP comparison benchmark documented.
-- [ ] Performance benchmarks published with hardware and thread settings.
+- [x] Performance benchmarks published with hardware and thread settings.
 - [x] Result HDF5 schema documented.
 - [ ] First external-user quickstart tested from a fresh machine.
 

@@ -51,6 +51,7 @@ def test_validation_gallery_documents_reference_commands() -> None:
     assert "Jaynes-Cummings Against QuTiP" in text
     assert "benchmarks/bench_vs_qutip.py" in text
     assert "scripts/validate_jaynes_cummings_qutip.py" in text
+    assert ":doc:`performance`" in text
 
 
 def test_result_hdf5_schema_documents_current_groups() -> None:
@@ -59,3 +60,13 @@ def test_result_hdf5_schema_documents_current_groups() -> None:
     assert "openquantumsim.result" in text
     assert "/state_observables_std/<name>" in text
     assert "openquantumsim.sweep.summary" in text
+
+
+def test_performance_page_documents_benchmark_environment() -> None:
+    text = (ROOT / "docs" / "performance.rst").read_text(encoding="utf-8")
+
+    assert "Performance Benchmarks" in text
+    assert "Apple M1" in text
+    assert "benchmarks/bench_vs_qutip.py" in text
+    assert "JULIA_NUM_THREADS=4" in text
+    assert "QuantumOptics.jl" in text

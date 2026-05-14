@@ -12,5 +12,6 @@ simulation.
    theory/index
    validation
    performance
+   quickstart_validation
    result_hdf5_schema
    release_checklist

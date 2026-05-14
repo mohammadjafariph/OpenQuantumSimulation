@@ -10,9 +10,9 @@ open-system examples.
 
 ## Current Status
 
-This repository is pre-alpha. It is usable for development and local research
-runs, but not ready for a public release until the gate in
-`docs/release_checklist.md` is green. The current scaffold includes:
+This repository is a public alpha candidate. It is usable for development and
+local research runs; release readiness is tracked in
+`docs/release_checklist.md`. The current package includes:
 
 - A Python package namespace: `openquantumsim`
 - A Julia backend package: `OpenQuantumSimJL`
@@ -40,8 +40,38 @@ Phase 1 and Phase 2 follow the R&D roadmap:
 ## Quick Start
 
 ```bash
-python -m pip install -e ".[dev]"
+python -m pip install -e .
 python setup_julia.py
+```
+
+The first Julia backend setup may spend a few minutes precompiling packages.
+Then run a small spontaneous-emission smoke test:
+
+```bash
+python - <<'PY'
+import numpy as np
+import openquantumsim as oqs
+
+atom = oqs.SpinSpace(0.5, label="atom")
+H = 0.0 * oqs.sigmaz(atom)
+psi0 = oqs.basis(atom, "up")
+rho0 = oqs.ket2dm(psi0)
+gamma = 0.2
+collapse = np.sqrt(gamma) * oqs.sigmam(atom)
+projector = oqs.Operator(oqs.ket2dm(psi0), atom, "P_excited")
+times = np.linspace(0.0, 0.2, 3)
+
+result = oqs.mesolve(H, rho0, times, c_ops=[collapse], e_ops=[projector])
+expected = np.exp(-gamma * times)
+print(result.expect[0].real)
+assert np.allclose(result.expect[0].real, expected, atol=2e-7)
+PY
+```
+
+For development checks, install the optional test tools and run:
+
+```bash
+python -m pip install -e ".[dev]"
 python -m pytest
 ```
 

@@ -5,10 +5,11 @@ green. This file is the standing answer to: "Is it ready to publish yet?"
 
 ## Current Status
 
-Status: public alpha candidate; not ready for public beta.
+Status: public alpha candidate; public beta gate is green pending the latest CI
+run after quickstart validation.
 
-The public alpha gate is green. Before a broader beta release, the package
-still needs a fresh-machine quickstart test and follow-up optimization work.
+The public alpha gate is green. The public beta gate is also feature-complete;
+wait for the latest CI run before tagging or publishing.
 
 ## Public Alpha Gate
 
@@ -35,7 +36,7 @@ still needs a fresh-machine quickstart test and follow-up optimization work.
 - [x] QuTiP comparison benchmark documented.
 - [x] Performance benchmarks published with hardware and thread settings.
 - [x] Result HDF5 schema documented.
-- [ ] First external-user quickstart tested from a fresh machine.
+- [x] First external-user quickstart tested from a fresh machine.
 
 ## Release Command Checklist
 

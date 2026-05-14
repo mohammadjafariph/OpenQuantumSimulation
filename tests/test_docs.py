@@ -70,3 +70,14 @@ def test_performance_page_documents_benchmark_environment() -> None:
     assert "benchmarks/bench_vs_qutip.py" in text
     assert "JULIA_NUM_THREADS=4" in text
     assert "QuantumOptics.jl" in text
+
+
+def test_quickstart_validation_documents_fresh_clone() -> None:
+    text = (ROOT / "docs" / "quickstart_validation.rst").read_text(
+        encoding="utf-8",
+    )
+
+    assert "Fresh-Clone Quickstart Validation" in text
+    assert "03cfa64" in text
+    assert ".venv/bin/python setup_julia.py" in text
+    assert "np.allclose" in text

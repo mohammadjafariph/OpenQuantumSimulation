@@ -52,17 +52,23 @@ def load_backend() -> Any:
     try:
         jl.seval("using Pkg")
         jl.Pkg.activate(path)
-        try:
-            jl.Pkg.instantiate()
-        except Exception:
-            jl.Pkg.resolve()
-            jl.Pkg.instantiate()
-        jl.seval("using OpenQuantumSimJL")
+        _instantiate_and_load_backend(jl)
         _BACKEND = jl.OpenQuantumSimJL
     except Exception as exc:  # pragma: no cover - depends on local Julia setup
         msg = f"Unable to load Julia backend from {path}."
         raise JuliaBridgeUnavailable(msg) from exc
     return _BACKEND
+
+
+def _instantiate_and_load_backend(jl: Any) -> None:
+    """Instantiate/load the backend, resolving stale manifests on retry."""
+    try:
+        jl.Pkg.instantiate()
+        jl.seval("using OpenQuantumSimJL")
+    except Exception:
+        jl.Pkg.resolve()
+        jl.Pkg.instantiate()
+        jl.seval("using OpenQuantumSimJL")
 
 
 def backend_available() -> bool:

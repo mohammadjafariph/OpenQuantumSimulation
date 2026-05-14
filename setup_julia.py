@@ -14,7 +14,16 @@ def main() -> None:
         "julia",
         f"--project={backend}",
         "-e",
-        "using Pkg; Pkg.instantiate(); Pkg.precompile()",
+        (
+            "using Pkg; "
+            "try "
+            "Pkg.instantiate(); Pkg.precompile(); "
+            "catch err "
+            "@warn \"Julia backend setup failed; resolving manifest and retrying\" "
+            "exception=(err, catch_backtrace()); "
+            "Pkg.resolve(); Pkg.instantiate(); Pkg.precompile(); "
+            "end"
+        ),
     ]
     subprocess.run(cmd, check=True)
 

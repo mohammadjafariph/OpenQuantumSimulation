@@ -2,30 +2,14 @@
 
 from __future__ import annotations
 
-import subprocess
-
-from openquantumsim._julia_bridge import backend_path
+from openquantumsim._julia_bridge import backend_path, load_backend
 
 
 def main() -> None:
-    """Instantiate the Julia backend environment."""
+    """Instantiate the Julia backend through the same runtime used by JuliaCall."""
     backend = backend_path()
-    cmd = [
-        "julia",
-        f"--project={backend}",
-        "-e",
-        (
-            "using Pkg; "
-            "try "
-            "Pkg.instantiate(); Pkg.precompile(); "
-            "catch err "
-            "@warn \"Julia backend setup failed; resolving manifest and retrying\" "
-            "exception=(err, catch_backtrace()); "
-            "Pkg.resolve(); Pkg.instantiate(); Pkg.precompile(); "
-            "end"
-        ),
-    ]
-    subprocess.run(cmd, check=True)
+    load_backend()
+    print(f"Julia backend ready: {backend}")
 
 
 if __name__ == "__main__":

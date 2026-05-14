@@ -21,7 +21,7 @@ validation hardening before strangers should depend on it.
 - [x] Continuous integration configured for Julia backend tests.
 - [x] Wheel install tested in a clean virtual environment.
 - [x] Julia backend instantiation tested from an installed wheel.
-- [ ] Continuous integration passing on the public repository.
+- [x] Continuous integration passing on the public repository.
 - [x] At least two canonical validation examples documented.
 - [x] API reference generated from docstrings.
 - [x] Version, repository URL, and citation metadata confirmed against the

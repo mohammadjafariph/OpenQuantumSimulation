@@ -51,3 +51,11 @@ def test_validation_gallery_documents_reference_commands() -> None:
     assert "Jaynes-Cummings Against QuTiP" in text
     assert "benchmarks/bench_vs_qutip.py" in text
     assert "scripts/validate_jaynes_cummings_qutip.py" in text
+
+
+def test_result_hdf5_schema_documents_current_groups() -> None:
+    text = (ROOT / "docs" / "result_hdf5_schema.rst").read_text(encoding="utf-8")
+
+    assert "openquantumsim.result" in text
+    assert "/state_observables_std/<name>" in text
+    assert "openquantumsim.sweep.summary" in text

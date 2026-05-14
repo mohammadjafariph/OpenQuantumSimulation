@@ -11,4 +11,5 @@ simulation.
    tutorials/index
    theory/index
    validation
+   result_hdf5_schema
    release_checklist

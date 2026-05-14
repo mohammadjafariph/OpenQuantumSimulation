@@ -29,11 +29,12 @@ validation hardening before strangers should depend on it.
 
 ## Public Beta Gate
 
-- [ ] `mcsolve` supports backend-side aggregation for general trajectory
-      diagnostics beyond linear `e_ops`.
+- [x] `mcsolve` supports backend-side aggregation for built-in trajectory
+      diagnostics that reduce to linear expectations or pure-trajectory
+      constants.
 - [x] QuTiP comparison benchmark documented.
 - [ ] Performance benchmarks published with hardware and thread settings.
-- [ ] Result HDF5 schema documented.
+- [x] Result HDF5 schema documented.
 - [ ] First external-user quickstart tested from a fresh machine.
 
 ## Release Command Checklist

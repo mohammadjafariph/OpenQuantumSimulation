@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from numbers import Number
 from typing import Any, cast
 
@@ -11,13 +12,30 @@ from numpy.typing import NDArray
 from scipy import sparse as sp  # type: ignore[import-untyped]
 
 from ._julia_bridge import JuliaBridgeUnavailable, load_backend
-from .observables import StateObservable, evaluate_state_observables
+from .observables import (
+    StateObservable,
+    _state_observable_spec,
+    evaluate_state_observables,
+)
 from .operators import Operator
 from .result import Options, Result
 from .timedep import InterpolatedCoefficient, TimeDependentHamiltonian
 
 Array = NDArray[np.complex128]
 FloatArray = NDArray[np.float64]
+
+
+@dataclass(frozen=True)
+class _MCStateObservableEntry:
+    name: str
+    operator_offset: int | None = None
+    constant: float | None = None
+
+
+@dataclass(frozen=True)
+class _MCStateObservablePlan:
+    operators: tuple[Array, ...]
+    entries: tuple[_MCStateObservableEntry, ...]
 
 
 def mesolve(
@@ -130,19 +148,24 @@ def mcsolve(
     state_observables: Mapping[str, StateObservable] | None = None,
     options: Options | None = None,
 ) -> Result:
-    """Run Monte Carlo wave-function trajectories."""
-    if state_observables:
-        msg = (
-            "state_observables are currently supported by mesolve and "
-            "single_trajectory; use e_ops for mcsolve ensemble expectations."
-        )
-        raise NotImplementedError(msg)
+    """Run Monte Carlo wave-function trajectories.
 
+    Built-in ``state_observables`` created by :func:`openquantumsim.state_metrics`
+    are aggregated by the backend when they can be represented as linear
+    expectation values or pure-trajectory constants. Arbitrary Python callbacks
+    remain available through :func:`single_trajectory` or deterministic
+    :func:`mesolve` runs with saved state access.
+    """
     opts = options or Options()
     times = np.asarray(tlist, dtype=np.float64)
     psi0_array = np.asarray(psi0, dtype=np.complex128).reshape(-1)
     c_arrays = [op.data for op in c_ops or []]
     e_arrays = [op.data for op in e_ops or []]
+    state_observable_plan = _mcsolve_state_observable_plan(
+        H.shape[0],
+        state_observables,
+    )
+    backend_e_arrays = [*e_arrays, *state_observable_plan.operators]
     trajectory_count = int(n_traj if n_traj is not None else opts.n_traj)
     seed = 0 if opts.seed is None else int(opts.seed)
 
@@ -151,7 +174,7 @@ def mcsolve(
         psi0_array,
         times,
         c_arrays,
-        e_arrays,
+        backend_e_arrays,
         trajectory_count,
         opts.max_step,
         opts.n_jobs,
@@ -169,7 +192,7 @@ def mcsolve(
         psi0_array,
         times,
         [_matrix_payload(backend, array) for array in c_arrays],
-        [_matrix_payload(backend, array) for array in e_arrays],
+        [_matrix_payload(backend, array) for array in backend_e_arrays],
         trajectory_count,
         seed,
         float(opts.max_step),
@@ -185,13 +208,25 @@ def mcsolve(
     raw_expect_stderr = np.asarray(_field(raw, "expect_stderr"), dtype=np.float64)
     raw_entropy = np.asarray(_field(raw, "entropy"), dtype=np.float64)
     stats = _to_python_dict(_field(raw, "solver_stats"))
-    expects = [raw_expect[idx, :].copy() for idx in range(raw_expect.shape[0])]
+    n_user_e_ops = len(e_arrays)
+    expects = [raw_expect[idx, :].copy() for idx in range(n_user_e_ops)]
     expect_std = [
-        raw_expect_std[idx, :].copy() for idx in range(raw_expect_std.shape[0])
+        raw_expect_std[idx, :].copy() for idx in range(n_user_e_ops)
     ]
     expect_stderr = [
-        raw_expect_stderr[idx, :].copy() for idx in range(raw_expect_stderr.shape[0])
+        raw_expect_stderr[idx, :].copy() for idx in range(n_user_e_ops)
     ]
+    observed, observed_std, observed_stderr = _mcsolve_state_observable_results(
+        state_observable_plan,
+        raw_expect,
+        raw_expect_std,
+        raw_expect_stderr,
+        n_user_e_ops,
+        len(raw_times),
+    )
+    if observed:
+        stats["state_observables"] = list(observed)
+        stats["state_observables_backend"] = True
 
     return Result(
         times=raw_times,
@@ -199,6 +234,9 @@ def mcsolve(
         expect=expects,
         expect_std=expect_std,
         expect_stderr=expect_stderr,
+        state_observables=observed,
+        state_observables_std=observed_std,
+        state_observables_stderr=observed_stderr,
         entropy=raw_entropy,
         solver_stats=stats,
     )
@@ -388,6 +426,178 @@ def _should_send_sparse(array: Array) -> bool:
         return False
     nnz = int(np.count_nonzero(array))
     return 4 * nnz <= int(array.size)
+
+
+def _mcsolve_state_observable_plan(
+    dim: int,
+    state_observables: Mapping[str, object] | None,
+) -> _MCStateObservablePlan:
+    if not state_observables:
+        return _MCStateObservablePlan(operators=(), entries=())
+
+    operators: list[Array] = []
+    entries: list[_MCStateObservableEntry] = []
+    for name, observable in state_observables.items():
+        _validate_state_observable_name(name)
+        if not callable(observable):
+            msg = f"state observable {name!r} must be callable."
+            raise TypeError(msg)
+
+        spec = _state_observable_spec(observable)
+        if spec is None:
+            msg = (
+                "mcsolve can aggregate built-in state observables created by "
+                "openquantumsim.state_metrics and the named observable helpers. "
+                "Arbitrary Python callbacks require mesolve or single_trajectory "
+                "with saved states."
+            )
+            raise NotImplementedError(msg)
+
+        kind = spec.get("kind")
+        if kind == "pure_constant":
+            entries.append(
+                _MCStateObservableEntry(
+                    name=name,
+                    constant=float(cast(float, spec["value"])),
+                ),
+            )
+        elif kind == "population":
+            index = int(cast(int, spec["index"]))
+            operators.append(_population_projector(dim, index))
+            entries.append(
+                _MCStateObservableEntry(
+                    name=name,
+                    operator_offset=len(operators) - 1,
+                ),
+            )
+        elif kind == "bloch":
+            index = int(cast(int, spec["index"]))
+            operators.append(_bloch_operator(dim, index))
+            entries.append(
+                _MCStateObservableEntry(
+                    name=name,
+                    operator_offset=len(operators) - 1,
+                ),
+            )
+        elif kind == "fidelity":
+            reference = np.asarray(spec["reference"], dtype=np.complex128)
+            operators.append(_pure_reference_projector(reference, dim))
+            entries.append(
+                _MCStateObservableEntry(
+                    name=name,
+                    operator_offset=len(operators) - 1,
+                ),
+            )
+        elif kind == "unsupported":
+            reason = str(spec.get("reason", "the metric is nonlinear"))
+            msg = (
+                f"mcsolve cannot aggregate state observable {name!r}: {reason}. "
+                "Use single_trajectory with save_states=True for per-trajectory "
+                "nonlinear callbacks."
+            )
+            raise NotImplementedError(msg)
+        else:
+            msg = f"unsupported built-in state observable kind for mcsolve: {kind!r}."
+            raise NotImplementedError(msg)
+
+    return _MCStateObservablePlan(operators=tuple(operators), entries=tuple(entries))
+
+
+def _mcsolve_state_observable_results(
+    plan: _MCStateObservablePlan,
+    raw_expect: Array,
+    raw_expect_std: FloatArray,
+    raw_expect_stderr: FloatArray,
+    operator_offset: int,
+    n_times: int,
+) -> tuple[dict[str, Array], dict[str, FloatArray], dict[str, FloatArray]]:
+    observed: dict[str, Array] = {}
+    observed_std: dict[str, FloatArray] = {}
+    observed_stderr: dict[str, FloatArray] = {}
+    for entry in plan.entries:
+        if entry.operator_offset is None:
+            value = complex(0.0 if entry.constant is None else entry.constant)
+            observed[entry.name] = np.full(n_times, value, dtype=np.complex128)
+            observed_std[entry.name] = np.zeros(n_times, dtype=np.float64)
+            observed_stderr[entry.name] = np.zeros(n_times, dtype=np.float64)
+            continue
+
+        idx = operator_offset + entry.operator_offset
+        observed[entry.name] = raw_expect[idx, :].copy()
+        observed_std[entry.name] = raw_expect_std[idx, :].copy()
+        observed_stderr[entry.name] = raw_expect_stderr[idx, :].copy()
+    return observed, observed_std, observed_stderr
+
+
+def _population_projector(dim: int, index: int) -> Array:
+    if index < 0 or index >= dim:
+        msg = f"population index {index} is outside Hilbert dimension {dim}."
+        raise ValueError(msg)
+    projector = np.zeros((dim, dim), dtype=np.complex128)
+    projector[index, index] = 1.0
+    return projector
+
+
+def _bloch_operator(dim: int, index: int) -> Array:
+    if dim != 2:
+        msg = "Bloch-vector state observables require a two-level mcsolve state."
+        raise ValueError(msg)
+    if index == 0:
+        return np.array([[0.0, 1.0], [1.0, 0.0]], dtype=np.complex128)
+    if index == 1:
+        return np.array([[0.0, -1.0j], [1.0j, 0.0]], dtype=np.complex128)
+    if index == 2:
+        return np.array([[1.0, 0.0], [0.0, -1.0]], dtype=np.complex128)
+    msg = f"Bloch-vector component index must be 0, 1, or 2; got {index}."
+    raise ValueError(msg)
+
+
+def _pure_reference_projector(reference: Array, dim: int) -> Array:
+    array = np.asarray(reference, dtype=np.complex128)
+    if array.ndim == 1:
+        if array.shape != (dim,):
+            msg = "fidelity reference ket length must match H."
+            raise ValueError(msg)
+        norm = np.linalg.norm(array)
+        if norm <= 0:
+            msg = "fidelity reference ket must have nonzero norm."
+            raise ValueError(msg)
+        ket = array / norm
+        return cast(Array, np.outer(ket, ket.conj()))
+
+    if array.ndim == 2 and array.shape == (dim, dim):
+        rho = np.asarray(0.5 * (array + array.conj().T), dtype=np.complex128)
+        trace = np.trace(rho)
+        if abs(trace) <= 1e-15:
+            msg = "fidelity reference density matrix must have nonzero trace."
+            raise ValueError(msg)
+        rho = cast(Array, rho / trace)
+        purity = float(np.real(np.trace(rho @ rho)))
+        if not np.isclose(purity, 1.0, atol=1e-8):
+            msg = (
+                "mcsolve can aggregate fidelity state observables only for pure "
+                "reference states; mixed-state fidelity is nonlinear."
+            )
+            raise NotImplementedError(msg)
+        return rho
+
+    msg = (
+        "fidelity reference must be a ket or density matrix with dimension "
+        "matching H."
+    )
+    raise ValueError(msg)
+
+
+def _validate_state_observable_name(name: object) -> None:
+    if not isinstance(name, str):
+        msg = "state observable names must be strings."
+        raise TypeError(msg)
+    if not name:
+        msg = "state observable names must not be empty."
+        raise ValueError(msg)
+    if "/" in name:
+        msg = "state observable names must not contain '/'."
+        raise ValueError(msg)
 
 
 def _validate_mcsolve_inputs(

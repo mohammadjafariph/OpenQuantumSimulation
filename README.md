@@ -278,6 +278,10 @@ psi0 = oqs.dicke_state(ensemble, excitations=ensemble.n_spins)
 Arbitrary scalar diagnostics can be evaluated from saved kets or density
 matrices and persisted with the solver result:
 
+For `mcsolve`, built-in diagnostics from `state_metrics` that are linear
+expectations or pure-trajectory constants are aggregated in the Julia backend
+with mean, standard deviation, and standard error.
+
 ```python
 metrics = oqs.state_metrics(
     purity=True,
@@ -311,7 +315,9 @@ loaded = oqs.load_result("runs/qubit_decay.h5")
 ```
 
 The file stores time points, expectation series, optional saved states,
-state-observable series, entropy, and solver statistics.
+state-observable series, Monte Carlo uncertainty estimates, entropy, and solver
+statistics. The full schema is documented in
+`docs/result_hdf5_schema.rst`.
 
 Long Monte Carlo trajectory runs can also checkpoint partial trajectory sums:
 

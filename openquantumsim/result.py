@@ -59,6 +59,8 @@ class Result:
     expect_std: list[FloatArray] = field(default_factory=list)
     expect_stderr: list[FloatArray] = field(default_factory=list)
     state_observables: dict[str, Array] = field(default_factory=dict)
+    state_observables_std: dict[str, FloatArray] = field(default_factory=dict)
+    state_observables_stderr: dict[str, FloatArray] = field(default_factory=dict)
     entropy: FloatArray | None = None
     solver_stats: dict[str, Any] = field(default_factory=dict)
 
@@ -104,13 +106,27 @@ class Result:
                 "expect_stderr",
                 data=_stack_series(self.expect_stderr, np.float64, len(times)),
             )
-            if self.state_observables:
-                observables_group = handle.create_group("state_observables")
-                for name, values in self.state_observables.items():
-                    observables_group.create_dataset(
-                        _validate_series_name(name),
-                        data=_series_array(values, np.complex128, len(times)),
-                    )
+            _write_named_series_group(
+                handle,
+                "state_observables",
+                self.state_observables,
+                np.complex128,
+                len(times),
+            )
+            _write_named_series_group(
+                handle,
+                "state_observables_std",
+                self.state_observables_std,
+                np.float64,
+                len(times),
+            )
+            _write_named_series_group(
+                handle,
+                "state_observables_stderr",
+                self.state_observables_stderr,
+                np.float64,
+                len(times),
+            )
 
             if self.entropy is not None:
                 entropy = np.asarray(self.entropy, dtype=np.float64)
@@ -152,6 +168,22 @@ class Result:
                     for name, dataset in group.items()
                     if isinstance(dataset, h5py.Dataset)
                 }
+            state_observables_std: dict[str, FloatArray] = {}
+            if "state_observables_std" in handle:
+                group = handle["state_observables_std"]
+                state_observables_std = {
+                    name: np.asarray(dataset, dtype=np.float64)
+                    for name, dataset in group.items()
+                    if isinstance(dataset, h5py.Dataset)
+                }
+            state_observables_stderr: dict[str, FloatArray] = {}
+            if "state_observables_stderr" in handle:
+                group = handle["state_observables_stderr"]
+                state_observables_stderr = {
+                    name: np.asarray(dataset, dtype=np.float64)
+                    for name, dataset in group.items()
+                    if isinstance(dataset, h5py.Dataset)
+                }
 
             stats: dict[str, Any] = {}
             if "solver_stats" in handle:
@@ -164,6 +196,8 @@ class Result:
                 expect_std=_unstack_series(handle["expect_std"], np.float64),
                 expect_stderr=_unstack_series(handle["expect_stderr"], np.float64),
                 state_observables=state_observables,
+                state_observables_std=state_observables_std,
+                state_observables_stderr=state_observables_stderr,
                 entropy=entropy,
                 solver_stats=stats,
             )
@@ -207,6 +241,23 @@ def _series_array(
         msg = "result time series entries must be one-dimensional and match times."
         raise ValueError(msg)
     return array
+
+
+def _write_named_series_group(
+    handle: h5py.File,
+    name: str,
+    series: Mapping[str, NDArray[Any]],
+    dtype: type[np.complex128] | type[np.float64],
+    width: int,
+) -> None:
+    if not series:
+        return
+    group = handle.create_group(name)
+    for series_name, values in series.items():
+        group.create_dataset(
+            _validate_series_name(series_name),
+            data=_series_array(values, dtype, width),
+        )
 
 
 def _validate_series_name(name: object) -> str:

@@ -67,6 +67,106 @@ def test_single_trajectory_state_observables_without_returning_states() -> None:
 
 
 @pytest.mark.physics
+def test_mcsolve_state_observables_are_backend_aggregated() -> None:
+    import openquantumsim as oqs
+    from openquantumsim._julia_bridge import backend_available
+
+    if not backend_available():
+        pytest.skip("Julia backend is not available.")
+
+    atom = oqs.SpinSpace(0.5, label="atom")
+    H = 0.0 * oqs.sigmaz(atom)
+    excited = oqs.basis(atom, "up")
+    times = np.linspace(0.0, 0.2, 3)
+
+    result = oqs.mcsolve(
+        H,
+        excited,
+        times,
+        n_traj=8,
+        state_observables=oqs.state_metrics(
+            purity=True,
+            entropy=True,
+            linear_entropy=True,
+            participation_ratio=True,
+            fidelity_to=excited,
+            population_indices=[0, 1],
+            bloch_vector=True,
+        ),
+        options=oqs.Options(seed=909, max_step=0.05, n_jobs=1),
+    )
+
+    assert result.states is None
+    assert result.expect == []
+    assert result.solver_stats["state_observables_backend"] is True
+    assert result.solver_stats["state_observables"] == [
+        "purity",
+        "entropy",
+        "linear_entropy",
+        "participation_ratio",
+        "population_0",
+        "population_1",
+        "bloch_x",
+        "bloch_y",
+        "bloch_z",
+        "fidelity",
+    ]
+    assert np.allclose(result.state_observables["purity"], np.ones_like(times))
+    assert np.allclose(result.state_observables["entropy"], np.zeros_like(times))
+    assert np.allclose(
+        result.state_observables["linear_entropy"],
+        np.zeros_like(times),
+    )
+    assert np.allclose(
+        result.state_observables["participation_ratio"],
+        np.ones_like(times),
+    )
+    assert np.allclose(result.state_observables["population_0"], np.ones_like(times))
+    assert np.allclose(result.state_observables["population_1"], np.zeros_like(times))
+    assert np.allclose(result.state_observables["bloch_x"], np.zeros_like(times))
+    assert np.allclose(result.state_observables["bloch_y"], np.zeros_like(times))
+    assert np.allclose(result.state_observables["bloch_z"], np.ones_like(times))
+    assert np.allclose(result.state_observables["fidelity"], np.ones_like(times))
+    for name in result.state_observables:
+        assert np.allclose(result.state_observables_std[name], np.zeros_like(times))
+        assert np.allclose(result.state_observables_stderr[name], np.zeros_like(times))
+
+
+def test_mcsolve_rejects_custom_state_observable_callback() -> None:
+    import openquantumsim as oqs
+
+    atom = oqs.SpinSpace(0.5, label="atom")
+    H = 0.0 * oqs.sigmaz(atom)
+    excited = oqs.basis(atom, "up")
+
+    with pytest.raises(NotImplementedError, match="built-in state observables"):
+        oqs.mcsolve(
+            H,
+            excited,
+            [0.0, 0.1],
+            n_traj=2,
+            state_observables={"custom": lambda state: 1.0},
+        )
+
+
+def test_mcsolve_rejects_nonlinear_builtin_state_observable() -> None:
+    import openquantumsim as oqs
+
+    atom = oqs.SpinSpace(0.5, label="atom")
+    H = 0.0 * oqs.sigmaz(atom)
+    excited = oqs.basis(atom, "up")
+
+    with pytest.raises(NotImplementedError, match="l1_coherence"):
+        oqs.mcsolve(
+            H,
+            excited,
+            [0.0, 0.1],
+            n_traj=2,
+            state_observables=oqs.state_metrics(l1_coherence=True),
+        )
+
+
+@pytest.mark.physics
 def test_mcsolve_qubit_decay_tracks_analytic_population() -> None:
     import openquantumsim as oqs
     from openquantumsim._julia_bridge import backend_available

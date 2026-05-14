@@ -12,6 +12,8 @@ from .operators import Operator
 
 Array = NDArray[np.complex128]
 StateObservable = Callable[[Array], Any]
+MetricSpec = Mapping[str, object]
+_METRIC_SPEC_ATTR = "__oqs_metric_spec__"
 
 
 def expect(operator: Operator, state: Array) -> complex:
@@ -226,6 +228,14 @@ def evaluate_state_observables(
     return values_by_name
 
 
+def _state_observable_spec(observable: object) -> MetricSpec | None:
+    """Return the internal solver spec for a built-in state observable."""
+    spec = getattr(observable, _METRIC_SPEC_ATTR, None)
+    if isinstance(spec, Mapping):
+        return spec
+    return None
+
+
 def state_metrics(
     *,
     purity: bool = False,
@@ -240,8 +250,10 @@ def state_metrics(
 ) -> dict[str, StateObservable]:
     """Build common state-observable callbacks for solver runs.
 
-    The returned mapping can be passed directly to ``mesolve`` or
-    ``single_trajectory`` via ``state_observables=...``.
+    The returned mapping can be passed directly to solvers via
+    ``state_observables=...``. ``mcsolve`` aggregates built-in metrics in the
+    backend when they reduce to linear expectations or pure-trajectory
+    constants.
     """
     metrics: dict[str, StateObservable] = {}
     if purity:
@@ -271,18 +283,33 @@ def fidelity_observable(
     name: str = "fidelity",
 ) -> dict[str, StateObservable]:
     """Return a named fidelity callback mapping for solver runs."""
-    reference_array = np.asarray(reference, dtype=np.complex128)
-    return {name: _scalar_metric(lambda state: fidelity(state, reference_array))}
+    reference_array = np.asarray(reference, dtype=np.complex128).copy()
+    return {
+        name: _scalar_metric(
+            lambda state: fidelity(state, reference_array),
+            spec={"kind": "fidelity", "reference": reference_array},
+        ),
+    }
 
 
 def purity_observable(*, name: str = "purity") -> dict[str, StateObservable]:
     """Return a named purity callback mapping for solver runs."""
-    return {name: _scalar_metric(globals()["purity"])}
+    return {
+        name: _scalar_metric(
+            globals()["purity"],
+            spec={"kind": "pure_constant", "value": 1.0},
+        ),
+    }
 
 
 def entropy_observable(*, name: str = "entropy") -> dict[str, StateObservable]:
     """Return a named von Neumann entropy callback mapping for solver runs."""
-    return {name: _scalar_metric(von_neumann_entropy)}
+    return {
+        name: _scalar_metric(
+            von_neumann_entropy,
+            spec={"kind": "pure_constant", "value": 0.0},
+        ),
+    }
 
 
 def linear_entropy_observable(
@@ -294,6 +321,7 @@ def linear_entropy_observable(
     return {
         name: _scalar_metric(
             lambda state: linear_entropy(state, normalized=normalized),
+            spec={"kind": "pure_constant", "value": 0.0},
         ),
     }
 
@@ -303,7 +331,12 @@ def participation_ratio_observable(
     name: str = "participation_ratio",
 ) -> dict[str, StateObservable]:
     """Return a named participation-ratio callback mapping for solver runs."""
-    return {name: _scalar_metric(participation_ratio)}
+    return {
+        name: _scalar_metric(
+            participation_ratio,
+            spec={"kind": "pure_constant", "value": 1.0},
+        ),
+    }
 
 
 def l1_coherence_observable(
@@ -311,7 +344,15 @@ def l1_coherence_observable(
     name: str = "l1_coherence",
 ) -> dict[str, StateObservable]:
     """Return a named l1-coherence callback mapping for solver runs."""
-    return {name: _scalar_metric(l1_coherence)}
+    return {
+        name: _scalar_metric(
+            l1_coherence,
+            spec={
+                "kind": "unsupported",
+                "reason": "l1_coherence is nonlinear in each trajectory state",
+            },
+        ),
+    }
 
 
 def trace_distance_observable(
@@ -320,8 +361,16 @@ def trace_distance_observable(
     name: str = "trace_distance",
 ) -> dict[str, StateObservable]:
     """Return a named trace-distance callback mapping for solver runs."""
-    reference_array = np.asarray(reference, dtype=np.complex128)
-    return {name: _scalar_metric(lambda state: trace_distance(state, reference_array))}
+    reference_array = np.asarray(reference, dtype=np.complex128).copy()
+    return {
+        name: _scalar_metric(
+            lambda state: trace_distance(state, reference_array),
+            spec={
+                "kind": "unsupported",
+                "reason": "trace_distance is nonlinear in each trajectory state",
+            },
+        ),
+    }
 
 
 def population_observable(
@@ -439,7 +488,11 @@ def partial_traces(state: Array, dim_a: int, dim_b: int) -> tuple[Array, Array]:
     )
 
 
-def _scalar_metric(callback: Callable[[Array], object]) -> StateObservable:
+def _scalar_metric(
+    callback: Callable[[Array], object],
+    *,
+    spec: Mapping[str, object] | None = None,
+) -> StateObservable:
     def _wrapped(state: Array) -> complex:
         value = np.asarray(callback(state))
         if value.shape != ():
@@ -447,6 +500,8 @@ def _scalar_metric(callback: Callable[[Array], object]) -> StateObservable:
             raise ValueError(msg)
         return complex(value.item())
 
+    if spec is not None:
+        _attach_metric_spec(_wrapped, spec)
     return _wrapped
 
 
@@ -454,6 +509,7 @@ def _population_metric(index: int) -> StateObservable:
     def _wrapped(state: Array) -> complex:
         return complex(float(populations(state)[index]))
 
+    _attach_metric_spec(_wrapped, {"kind": "population", "index": index})
     return _wrapped
 
 
@@ -461,7 +517,15 @@ def _bloch_metric(index: int) -> StateObservable:
     def _wrapped(state: Array) -> complex:
         return complex(float(bloch_vector(state)[index]))
 
+    _attach_metric_spec(_wrapped, {"kind": "bloch", "index": index})
     return _wrapped
+
+
+def _attach_metric_spec(
+    observable: StateObservable,
+    spec: Mapping[str, object],
+) -> None:
+    setattr(observable, _METRIC_SPEC_ATTR, dict(spec))
 
 
 def _density_matrix(state: Array) -> Array:

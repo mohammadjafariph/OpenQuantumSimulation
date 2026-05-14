@@ -21,6 +21,12 @@ def test_result_hdf5_roundtrip(tmp_path: Path) -> None:
         state_observables={
             "purity": np.array([1.0, 0.68, 0.52, 0.52], dtype=np.complex128),
         },
+        state_observables_std={
+            "purity": np.array([0.0, 0.05, 0.08, 0.07], dtype=np.float64),
+        },
+        state_observables_stderr={
+            "purity": np.array([0.0, 0.005, 0.008, 0.007], dtype=np.float64),
+        },
         entropy=np.array([0.0, 0.1, 0.2, 0.3], dtype=np.float64),
         solver_stats={
             "retcode": "Success",
@@ -48,7 +54,16 @@ def test_result_hdf5_roundtrip(tmp_path: Path) -> None:
         loaded.state_observables["purity"],
         result.state_observables["purity"],
     )
+    assert np.allclose(
+        loaded.state_observables_std["purity"],
+        result.state_observables_std["purity"],
+    )
+    assert np.allclose(
+        loaded.state_observables_stderr["purity"],
+        result.state_observables_stderr["purity"],
+    )
     assert loaded.entropy is not None
+    assert result.entropy is not None
     assert np.allclose(loaded.entropy, result.entropy)
     assert loaded.solver_stats["retcode"] == "Success"
     assert loaded.solver_stats["n_traj"] == 500
@@ -71,6 +86,8 @@ def test_result_hdf5_roundtrip_without_optional_arrays(tmp_path: Path) -> None:
     assert loaded.expect_std == []
     assert loaded.expect_stderr == []
     assert loaded.state_observables == {}
+    assert loaded.state_observables_std == {}
+    assert loaded.state_observables_stderr == {}
     assert loaded.entropy is None
     assert loaded.solver_stats == {}
 

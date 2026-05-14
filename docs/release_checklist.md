@@ -5,11 +5,12 @@ green. This file is the standing answer to: "Is it ready to publish yet?"
 
 ## Current Status
 
-Status: public alpha candidate; public beta gate is green pending the latest CI
-run after quickstart validation.
+Status: public alpha release candidate. The public alpha and public beta gates
+are green, and local release artifacts for `v0.1.0a0` have passed smoke tests.
 
-The public alpha gate is green. The public beta gate is also feature-complete;
-wait for the latest CI run before tagging or publishing.
+Latest green public CI: run #10 on commit `a14d27e`, completed on 2026-05-14.
+Latest local artifact check: wheel/sdist build, `twine check`, and installed
+wheel Julia-backend smoke test passed on 2026-05-14.
 
 ## Public Alpha Gate
 
@@ -45,9 +46,10 @@ Run these before tagging a release:
 ```bash
 python scripts/check_publish_ready.py
 python scripts/check_wheel_install.py
-python -m ruff check openquantumsim examples tests scripts benchmarks README.md
-python -m mypy openquantumsim
+python -m ruff check openquantumsim examples tests scripts benchmarks README.md setup_julia.py
+python -m mypy openquantumsim scripts/check_publish_ready.py setup_julia.py
 python -m pytest
 julia --project=src/OpenQuantumSimJL -e 'using Pkg; Pkg.test()'
-python -m pip wheel . --no-deps -w dist
+python -m build --outdir dist
+python -m twine check dist/*
 ```

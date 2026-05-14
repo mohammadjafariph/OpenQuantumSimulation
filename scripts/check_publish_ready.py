@@ -19,7 +19,9 @@ REQUIRED_FILES = [
     "pyproject.toml",
     ".github/workflows/release.yml",
     "openquantumsim/py.typed",
+    "docs/publishing.rst",
     "docs/release_checklist.md",
+    "scripts/check_index_install.py",
     "scripts/check_wheel_install.py",
 ]
 

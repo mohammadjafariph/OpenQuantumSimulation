@@ -13,5 +13,6 @@ simulation.
    validation
    performance
    quickstart_validation
+   publishing
    result_hdf5_schema
    release_checklist

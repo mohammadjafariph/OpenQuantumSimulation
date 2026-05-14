@@ -81,3 +81,13 @@ def test_quickstart_validation_documents_fresh_clone() -> None:
     assert "03cfa64" in text
     assert ".venv/bin/python setup_julia.py" in text
     assert "np.allclose" in text
+
+
+def test_publishing_docs_record_trusted_publisher_settings() -> None:
+    text = (ROOT / "docs" / "publishing.rst").read_text(encoding="utf-8")
+
+    assert "Trusted Publisher Settings" in text
+    assert "testpypi" in text
+    assert "pypi" in text
+    assert "release.yml" in text
+    assert "scripts/check_index_install.py" in text

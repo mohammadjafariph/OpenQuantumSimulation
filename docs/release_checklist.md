@@ -6,17 +6,19 @@ green. This file is the standing answer to: "Is it ready to publish yet?"
 ## Current Status
 
 Status: public alpha release candidate. The public alpha and public beta gates
-are green, `v0.1.0a0` is tagged, and local release artifacts have passed smoke
-tests.
+are green. `v0.1.0a0` is tagged for GitHub assets, and `v0.1.0a1` is the first
+package-index candidate after PyPI metadata cleanup.
 
-Release tag: `v0.1.0a0` on commit `ebf41f5`.
+Latest package-index candidate: `v0.1.0a1`.
+GitHub-only alpha tag: `v0.1.0a0` on commit `ebf41f5`.
 Latest green public CI for the release commit: run #11 on commit `ebf41f5`,
 completed on 2026-05-14.
 Latest local artifact check: wheel/sdist build, `twine check`, and installed
 wheel Julia-backend smoke test passed on 2026-05-14.
-Latest TestPyPI attempt: workflow run `25888520472` built artifacts and updated
-the GitHub Release, then failed at PyPI trusted-publisher lookup because no
-matching TestPyPI publisher exists yet.
+Latest TestPyPI attempt: workflow run `25930969150` built artifacts, updated
+the GitHub Release, exchanged the trusted-publishing token successfully, then
+failed because PyPI rejected the invalid classifier `Programming Language ::
+Julia`. `v0.1.0a1` removes that classifier.
 
 ## Public Alpha Gate
 
@@ -35,7 +37,7 @@ matching TestPyPI publisher exists yet.
 - [x] Version, repository URL, and citation metadata confirmed against the
       actual public repository.
 - [x] GitHub release workflow configured for tagged distribution builds.
-- [ ] TestPyPI trusted publisher configured.
+- [x] TestPyPI trusted publisher configured.
 - [ ] TestPyPI install verified from a fresh virtual environment.
 - [ ] PyPI trusted publisher configured.
 - [ ] PyPI install verified from a fresh virtual environment.

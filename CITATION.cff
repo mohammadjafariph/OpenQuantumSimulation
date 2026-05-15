@@ -1,7 +1,7 @@
 cff-version: 1.2.0
 message: "If you use OpenQuantumSim, please cite the software release."
 title: "OpenQuantumSim"
-version: "0.1.0-alpha"
+version: "0.1.0a1"
 abstract: "Python-accessible, Julia-powered simulation tools for open quantum systems."
 authors:
   - family-names: "Jafari"

@@ -7,6 +7,12 @@ Until then, entries are grouped under alpha releases.
 
 ## Unreleased
 
+## 0.1.0a1 - 2026-05-15
+
+- Removed an invalid PyPI trove classifier from the package metadata so the
+  alpha can be published through TestPyPI/PyPI.
+- Documented TestPyPI and PyPI trusted-publisher verification commands.
+
 ## 0.1.0a0 - 2026-05-14
 
 - Added a Python frontend and Julia backend package scaffold.

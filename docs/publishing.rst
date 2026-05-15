@@ -9,9 +9,10 @@ indexes is manually gated through PyPI trusted publishing.
 Current Release State
 ---------------------
 
-``v0.1.0a0`` is tagged and the GitHub Release contains both distribution
-artifacts. TestPyPI trusted publishing was configured successfully after an
-initial setup miss:
+``v0.1.0a1`` is published on TestPyPI and passed a clean install smoke test.
+``v0.1.0a0`` remains a GitHub-only alpha artifact because its package metadata
+was rejected by PyPI. TestPyPI trusted publishing was configured successfully
+after an initial setup miss:
 
 .. code-block:: text
 
@@ -21,10 +22,11 @@ That meant GitHub generated a valid OIDC token, but TestPyPI did not yet have
 a trusted publisher matching this repository and workflow. The matching
 TestPyPI publisher is now configured.
 
-A later TestPyPI attempt reached the upload step but PyPI rejected the
-``v0.1.0a0`` metadata because ``Programming Language :: Julia`` is not a valid
-trove classifier. ``v0.1.0a1`` removes that classifier and is the first package
-index candidate.
+A later ``v0.1.0a0`` TestPyPI attempt reached the upload step but PyPI rejected
+the ``v0.1.0a0`` metadata because ``Programming Language :: Julia`` is not a
+valid trove classifier. ``v0.1.0a1`` removes that classifier and is the first
+package index candidate. It was published to TestPyPI and verified from a fresh
+virtual environment on 2026-05-15.
 
 Trusted Publisher Settings
 --------------------------

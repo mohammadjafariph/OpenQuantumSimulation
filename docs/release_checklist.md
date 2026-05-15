@@ -6,8 +6,8 @@ green. This file is the standing answer to: "Is it ready to publish yet?"
 ## Current Status
 
 Status: public alpha release candidate. The public alpha and public beta gates
-are green. `v0.1.0a0` is tagged for GitHub assets, and `v0.1.0a1` is the first
-package-index candidate after PyPI metadata cleanup.
+are green. `v0.1.0a1` is published on TestPyPI and passed an installed-wheel
+backend smoke test from a fresh virtual environment.
 
 Latest package-index candidate: `v0.1.0a1`.
 GitHub-only alpha tag: `v0.1.0a0` on commit `ebf41f5`.
@@ -15,10 +15,11 @@ Latest green public CI for the release commit: run #11 on commit `ebf41f5`,
 completed on 2026-05-14.
 Latest local artifact check: wheel/sdist build, `twine check`, and installed
 wheel Julia-backend smoke test passed on 2026-05-14.
-Latest TestPyPI attempt: workflow run `25930969150` built artifacts, updated
-the GitHub Release, exchanged the trusted-publishing token successfully, then
-failed because PyPI rejected the invalid classifier `Programming Language ::
-Julia`. `v0.1.0a1` removes that classifier.
+Latest TestPyPI publish: workflow run `25931648325` built artifacts, updated
+the GitHub Release, and published `openquantumsim==0.1.0a1` to TestPyPI on
+2026-05-15.
+Latest TestPyPI install check: `python scripts/check_index_install.py --index
+testpypi --version 0.1.0a1` passed on 2026-05-15.
 
 ## Public Alpha Gate
 
@@ -38,7 +39,7 @@ Julia`. `v0.1.0a1` removes that classifier.
       actual public repository.
 - [x] GitHub release workflow configured for tagged distribution builds.
 - [x] TestPyPI trusted publisher configured.
-- [ ] TestPyPI install verified from a fresh virtual environment.
+- [x] TestPyPI install verified from a fresh virtual environment.
 - [ ] PyPI trusted publisher configured.
 - [ ] PyPI install verified from a fresh virtual environment.
 

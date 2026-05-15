@@ -9,10 +9,10 @@ indexes is manually gated through PyPI trusted publishing.
 Current Release State
 ---------------------
 
-``v0.1.0a1`` is published on TestPyPI and passed a clean install smoke test.
-``v0.1.0a0`` remains a GitHub-only alpha artifact because its package metadata
-was rejected by PyPI. TestPyPI trusted publishing was configured successfully
-after an initial setup miss:
+``v0.1.0a1`` is published on PyPI and TestPyPI, and both package indexes passed
+clean install smoke tests. ``v0.1.0a0`` remains a GitHub-only alpha artifact
+because its package metadata was rejected by PyPI. TestPyPI trusted publishing
+was configured successfully after an initial setup miss:
 
 .. code-block:: text
 
@@ -50,8 +50,8 @@ pending publisher for the project name ``openquantumsim``.
    * - Environment
      - ``testpypi``
 
-After TestPyPI succeeds, configure the same trusted publisher on PyPI with the
-environment set to ``pypi``.
+PyPI uses the same trusted publisher settings with the environment set to
+``pypi``. Both trusted publishers are configured for ``v0.1.0a1``.
 
 TestPyPI Publish
 ----------------
@@ -96,3 +96,5 @@ Then verify installation from PyPI:
    python scripts/check_index_install.py \
        --index pypi \
        --version 0.1.0a1
+
+This verification passed for ``v0.1.0a1`` on 2026-05-15.

@@ -5,9 +5,9 @@ green. This file is the standing answer to: "Is it ready to publish yet?"
 
 ## Current Status
 
-Status: public alpha release candidate. The public alpha and public beta gates
-are green. `v0.1.0a1` is published on TestPyPI and passed an installed-wheel
-backend smoke test from a fresh virtual environment.
+Status: public alpha published. The public alpha and public beta gates are
+green. `v0.1.0a1` is published on PyPI and TestPyPI and passed installed-wheel
+backend smoke tests from fresh virtual environments.
 
 Latest package-index candidate: `v0.1.0a1`.
 GitHub-only alpha tag: `v0.1.0a0` on commit `ebf41f5`.
@@ -20,6 +20,10 @@ the GitHub Release, and published `openquantumsim==0.1.0a1` to TestPyPI on
 2026-05-15.
 Latest TestPyPI install check: `python scripts/check_index_install.py --index
 testpypi --version 0.1.0a1` passed on 2026-05-15.
+Latest PyPI publish: workflow run `25932832939` built artifacts, updated the
+GitHub Release, and published `openquantumsim==0.1.0a1` to PyPI on 2026-05-15.
+Latest PyPI install check: `python scripts/check_index_install.py --index pypi
+--version 0.1.0a1` passed on 2026-05-15.
 
 ## Public Alpha Gate
 
@@ -40,8 +44,8 @@ testpypi --version 0.1.0a1` passed on 2026-05-15.
 - [x] GitHub release workflow configured for tagged distribution builds.
 - [x] TestPyPI trusted publisher configured.
 - [x] TestPyPI install verified from a fresh virtual environment.
-- [ ] PyPI trusted publisher configured.
-- [ ] PyPI install verified from a fresh virtual environment.
+- [x] PyPI trusted publisher configured.
+- [x] PyPI install verified from a fresh virtual environment.
 
 ## Public Beta Gate
 

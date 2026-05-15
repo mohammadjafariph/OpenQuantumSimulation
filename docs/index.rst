@@ -7,12 +7,10 @@ simulation.
 .. toctree::
    :maxdepth: 2
 
+   quickstart
    api/index
    tutorials/index
    theory/index
    validation
    performance
-   quickstart_validation
-   publishing
    result_hdf5_schema
-   release_checklist

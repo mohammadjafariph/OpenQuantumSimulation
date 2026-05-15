@@ -6,7 +6,11 @@ extensions = [
     "sphinx.ext.napoleon",
 ]
 templates_path = ["_templates"]
-exclude_patterns = []
+exclude_patterns = [
+    "publishing.rst",
+    "quickstart_validation.rst",
+    "release_checklist.md",
+]
 html_theme = "alabaster"
 
 autodoc_member_order = "bysource"

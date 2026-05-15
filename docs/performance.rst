@@ -1,10 +1,10 @@
 Performance Benchmarks
 ======================
 
-This page records the current OpenQuantumSim performance baseline. The numbers
-below are not a universal leaderboard; they are a reproducible local benchmark
-snapshot used to track optimization work and publish honest expectations for
-early users.
+This page records a reproducible OpenQuantumSim performance baseline. The
+numbers below are not a universal leaderboard; they document one hardware and
+software configuration so future benchmark results can be compared against the
+same reference point.
 
 Benchmark Environment
 ---------------------
@@ -88,11 +88,10 @@ single-threaded backend process for this deterministic benchmark.
      - 0.29x
      - 7.23e-09
 
-Interpretation: QuTiP is faster for these small deterministic systems. The
-current OpenQuantumSim cost is dominated by Python-to-Julia overhead and solver
-setup, while expectation values agree with QuTiP at about ``1e-9`` to ``1e-8``.
-The next optimization target is amortizing backend setup across larger batched
-runs and reducing boundary crossings for small systems.
+Interpretation: QuTiP is faster for these small deterministic systems. In this
+regime, OpenQuantumSim wall time is dominated by Python-to-Julia overhead and
+solver setup, while expectation values agree with QuTiP at about ``1e-9`` to
+``1e-8``.
 
 Monte Carlo Wave Function Scaling
 ---------------------------------
@@ -186,23 +185,13 @@ Command:
      - 1.6469
      - 0.004x
 
-Interpretation: this tiny Dicke MI benchmark exposes a process-startup
-bottleneck. Each short-lived worker initializes its own Julia backend, so
-parallelism is much slower for small batches. Production-sized work should use
-larger batches, and the runner needs persistent workers or a Julia sysimage
-before process parallelism should be advertised as a speedup.
+Interpretation: this small Dicke MI benchmark exposes process-startup overhead.
+Each short-lived worker initializes its own Julia backend, so process
+parallelism is slower for small batches. Larger batches better amortize startup
+costs.
 
-Optimization Notes
-------------------
-
-Current priorities from these measurements:
-
-* reduce Python-to-Julia call overhead for small deterministic systems;
-* benchmark larger deterministic Hilbert spaces where Krylov propagation should
-  have a better chance to amortize setup costs;
-* make Dicke MI workers persistent across repeats and parameter points;
-* investigate Julia sysimage/precompilation for lower process startup cost;
-* add a QuantumOptics.jl comparison harness as a separate benchmark track.
+Reproducing Results
+-------------------
 
 The raw JSON outputs are generated under ``runs/benchmarks/`` and are ignored by
 Git. Re-run the commands above to regenerate the local benchmark artifacts.

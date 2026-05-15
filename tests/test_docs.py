@@ -54,6 +54,23 @@ def test_validation_gallery_documents_reference_commands() -> None:
     assert ":doc:`performance`" in text
 
 
+def test_public_docs_index_excludes_internal_release_notes() -> None:
+    text = (ROOT / "docs" / "index.rst").read_text(encoding="utf-8")
+
+    assert "quickstart" in text
+    assert "publishing" not in text
+    assert "release_checklist" not in text
+    assert "quickstart_validation" not in text
+
+
+def test_sphinx_excludes_internal_maintainer_pages() -> None:
+    text = (ROOT / "docs" / "conf.py").read_text(encoding="utf-8")
+
+    assert '"publishing.rst"' in text
+    assert '"release_checklist.md"' in text
+    assert '"quickstart_validation.rst"' in text
+
+
 def test_result_hdf5_schema_documents_current_groups() -> None:
     text = (ROOT / "docs" / "result_hdf5_schema.rst").read_text(encoding="utf-8")
 
@@ -69,17 +86,14 @@ def test_performance_page_documents_benchmark_environment() -> None:
     assert "Apple M1" in text
     assert "benchmarks/bench_vs_qutip.py" in text
     assert "JULIA_NUM_THREADS=4" in text
-    assert "QuantumOptics.jl" in text
+    assert "Reproducing Results" in text
 
 
-def test_quickstart_validation_documents_fresh_clone() -> None:
-    text = (ROOT / "docs" / "quickstart_validation.rst").read_text(
-        encoding="utf-8",
-    )
+def test_quickstart_page_documents_install_and_smoke_test() -> None:
+    text = (ROOT / "docs" / "quickstart.rst").read_text(encoding="utf-8")
 
-    assert "Fresh-Clone Quickstart Validation" in text
-    assert "03cfa64" in text
-    assert ".venv/bin/python setup_julia.py" in text
+    assert "python -m pip install openquantumsim" in text
+    assert "Spontaneous Emission" in text
     assert "np.allclose" in text
 
 

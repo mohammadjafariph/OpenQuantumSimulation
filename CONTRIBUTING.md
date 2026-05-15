@@ -1,8 +1,8 @@
 # Contributing
 
-OpenQuantumSim is still pre-alpha, so the most useful contributions are small,
-well-tested changes that make the public API clearer, more reliable, or easier
-to install.
+OpenQuantumSim is an alpha-stage package, so the most useful contributions are
+small, well-tested changes that make the public API clearer, more reliable, or
+easier to install.
 
 ## Development Setup
 

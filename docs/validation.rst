@@ -96,7 +96,7 @@ models and time grids:
 
 The report includes median wall time, minimum wall time, speedup relative to
 QuTiP, and the maximum expectation-value deviation from the QuTiP reference.
-For publishable benchmark numbers, record the CPU model, Julia thread count,
+For reproducible benchmark numbers, record the CPU model, Julia thread count,
 Python version, Julia version, OpenQuantumSim commit, and QuTiP version next to
 the generated JSON.
 

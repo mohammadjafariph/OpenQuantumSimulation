@@ -52,7 +52,7 @@ validation = [
 [project.urls]
 Homepage = "https://github.com/mohammadjafariph/OpenQuantumSimulation"
 Issues = "https://github.com/mohammadjafariph/OpenQuantumSimulation/issues"
-Documentation = "https://github.com/mohammadjafariph/OpenQuantumSimulation#readme"
+Documentation = "https://mohammadjafariph.github.io/OpenQuantumSimulation/"
 Source = "https://github.com/mohammadjafariph/OpenQuantumSimulation"
 
 [tool.setuptools.packages.find]

@@ -7,11 +7,14 @@ extensions = [
 ]
 templates_path = ["_templates"]
 exclude_patterns = [
+    "_build",
     "publishing.rst",
     "quickstart_validation.rst",
     "release_checklist.md",
 ]
 html_theme = "alabaster"
+html_title = "OpenQuantumSim"
+html_baseurl = "https://mohammadjafariph.github.io/OpenQuantumSimulation/"
 
 autodoc_member_order = "bysource"
 autodoc_typehints = "description"

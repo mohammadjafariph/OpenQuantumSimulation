@@ -1,10 +1,16 @@
 # OpenQuantumSim
 
+[![CI](https://github.com/mohammadjafariph/OpenQuantumSimulation/actions/workflows/ci.yml/badge.svg)](https://github.com/mohammadjafariph/OpenQuantumSimulation/actions/workflows/ci.yml)
+[![Docs](https://github.com/mohammadjafariph/OpenQuantumSimulation/actions/workflows/docs.yml/badge.svg)](https://github.com/mohammadjafariph/OpenQuantumSimulation/actions/workflows/docs.yml)
+[![PyPI](https://img.shields.io/pypi/v/openquantumsim.svg)](https://pypi.org/project/openquantumsim/)
+
 OpenQuantumSim is a Python package for simulating open quantum systems with a
 Julia backend for numerical propagation. It provides a Python-first interface
 for constructing Hilbert spaces, states, operators, Lindblad models,
 Monte Carlo wave-function trajectories, observables, parameter sweeps, and
 common state diagnostics.
+
+Documentation: https://mohammadjafariph.github.io/OpenQuantumSimulation/
 
 The package is currently released as an alpha. The API is usable, tested, and
 published on PyPI, but minor interface changes may still occur before a stable

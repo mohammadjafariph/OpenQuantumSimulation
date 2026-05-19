@@ -8,6 +8,7 @@ default.
 .. toctree::
    :maxdepth: 1
 
+   qubit_decay_5min
    01_qubit_decay_mesolve
    02_parameter_sweep
    03_phase_space_plotting

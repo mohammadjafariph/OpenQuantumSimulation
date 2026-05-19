@@ -63,6 +63,20 @@ def test_public_docs_index_excludes_internal_release_notes() -> None:
     assert "quickstart_validation" not in text
 
 
+def test_qubit_decay_tutorial_is_public_entrypoint() -> None:
+    text = (ROOT / "docs" / "tutorials" / "index.rst").read_text(encoding="utf-8")
+    tutorial = (ROOT / "docs" / "tutorials" / "qubit_decay_5min.rst").read_text(
+        encoding="utf-8",
+    )
+
+    assert "qubit_decay_5min" in text
+    assert "Qubit Decay in Five Minutes" in tutorial
+    assert "oqs.mesolve" in tutorial
+    assert "np.exp(-gamma * times)" in tutorial
+    assert "result.save_hdf5" in tutorial
+    assert "oqs.mcsolve" in tutorial
+
+
 def test_sphinx_excludes_internal_maintainer_pages() -> None:
     text = (ROOT / "docs" / "conf.py").read_text(encoding="utf-8")
 

@@ -2,7 +2,7 @@ module OpenQuantumSimJL
 
 using LinearAlgebra
 using SparseArrays
-using DifferentialEquations
+using OrdinaryDiffEq
 using KrylovKit
 using HDF5
 using PythonCall

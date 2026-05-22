@@ -17,7 +17,7 @@ Benchmark Environment
    * - Date
      - 2026-05-22
    * - OpenQuantumSim commit
-     - stats-conversion optimization snapshot
+     - startup optimization snapshot
    * - CPU
      - Apple M1
    * - Logical CPU count
@@ -116,6 +116,107 @@ Python-side probing of optional fields in the Julia ``NamedTuple`` used for
      - 100 warm qubit-decay ``mesolve`` calls
      - 0.050 s
      - 0.007 s
+
+Backend Startup Profile
+-----------------------
+
+Command:
+
+.. code-block:: bash
+
+   PYTHON_JULIACALL_HANDLE_SIGNALS=yes python - <<'PY'
+   import time
+   import numpy as np
+   import openquantumsim as oqs
+   from openquantumsim._julia_bridge import get_julia, load_backend
+
+   started = time.perf_counter(); get_julia()
+   print("get_julia", time.perf_counter() - started)
+   started = time.perf_counter(); load_backend()
+   print("load_backend", time.perf_counter() - started)
+
+   space = oqs.SpinSpace(0.5, label="atom")
+   psi = oqs.basis(space, "up")
+   H = 0.0 * oqs.sigmaz(space)
+   c = np.sqrt(0.35) * oqs.sigmam(space)
+   e = oqs.Operator(oqs.ket2dm(psi), space, "P_excited")
+   t = np.linspace(0.0, 1.0, 11)
+
+   started = time.perf_counter()
+   oqs.mesolve(H, oqs.ket2dm(psi), t, c_ops=[c], e_ops=[e])
+   print("first_mesolve", time.perf_counter() - started)
+   PY
+
+The profile below measures a fresh Python process after the Julia backend has
+already been set up once. Normal runtime loads now skip ``Pkg.instantiate()``
+unless loading the backend fails; ``setup_julia.py`` still forces
+instantiation for installation validation.
+
+.. list-table::
+   :header-rows: 1
+
+   * - Profile
+     - ``import openquantumsim``
+     - ``get_julia()``
+     - ``load_backend()``
+     - First ``mesolve``
+     - Total
+   * - Before
+     - 0.786 s
+     - 2.602 s
+     - 11.337 s
+     - 7.775 s
+     - 22.500 s
+   * - After
+     - 0.334 s
+     - 3.005 s
+     - 6.139 s
+     - 7.816 s
+     - 17.294 s
+
+The same change also suppresses routine Julia package-manager output during
+normal solver calls.
+
+Larger Deterministic Spot Checks
+--------------------------------
+
+Command:
+
+.. code-block:: bash
+
+   MPLBACKEND=Agg PYTHON_JULIACALL_HANDLE_SIGNALS=yes \
+   python benchmarks/bench_vs_qutip.py \
+       --repeats 3 \
+       --time-points 81 \
+       --t-final 6.0 \
+       --cases jc20 jc40 \
+       --oqs-methods auto ode krylov \
+       --json runs/benchmarks/bench_vs_qutip_larger_startup_patch.json
+
+.. list-table::
+   :header-rows: 1
+
+   * - Case
+     - Dimension
+     - QuTiP median
+     - OQS auto median
+     - Best OQS median
+     - OQS auto vs QuTiP
+     - Max expectation delta
+   * - Jaynes-Cummings 20
+     - 40
+     - 3.91 ms
+     - 2.95 ms
+     - 2.95 ms (``auto``)
+     - 1.32x
+     - 1.96e-08
+   * - Jaynes-Cummings 40
+     - 80
+     - 13.93 ms
+     - 10.38 ms
+     - 8.52 ms (``ode``)
+     - 1.34x
+     - 4.71e-08
 
 Monte Carlo Wave Function Scaling
 ---------------------------------

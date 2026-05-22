@@ -41,7 +41,7 @@ def get_julia() -> Any:
     return jl
 
 
-def load_backend() -> Any:
+def load_backend(*, instantiate: bool = False) -> Any:
     """Activate and load the `OpenQuantumSimJL` backend module."""
     global _BACKEND
     if _BACKEND is not None:
@@ -51,8 +51,8 @@ def load_backend() -> Any:
     path = str(backend_path())
     try:
         jl.seval("using Pkg")
-        jl.Pkg.activate(path)
-        _instantiate_and_load_backend(jl)
+        jl.Pkg.activate(path, io=jl.devnull)
+        _load_backend_module(jl, instantiate=instantiate)
         _BACKEND = jl.OpenQuantumSimJL
     except Exception as exc:  # pragma: no cover - depends on local Julia setup
         msg = f"Unable to load Julia backend from {path}."
@@ -60,14 +60,26 @@ def load_backend() -> Any:
     return _BACKEND
 
 
+def _load_backend_module(jl: Any, *, instantiate: bool) -> None:
+    """Load the backend, instantiating only when requested or needed."""
+    if instantiate:
+        _instantiate_and_load_backend(jl)
+        return
+
+    try:
+        jl.seval("using OpenQuantumSimJL")
+    except Exception:
+        _instantiate_and_load_backend(jl)
+
+
 def _instantiate_and_load_backend(jl: Any) -> None:
     """Instantiate/load the backend, resolving stale manifests on retry."""
     try:
-        jl.Pkg.instantiate()
+        jl.Pkg.instantiate(io=jl.devnull)
         jl.seval("using OpenQuantumSimJL")
     except Exception:
-        jl.Pkg.resolve()
-        jl.Pkg.instantiate()
+        jl.Pkg.resolve(io=jl.devnull)
+        jl.Pkg.instantiate(io=jl.devnull)
         jl.seval("using OpenQuantumSimJL")
 
 

@@ -8,7 +8,7 @@ from openquantumsim._julia_bridge import backend_path, load_backend
 def main() -> None:
     """Instantiate the Julia backend through the same runtime used by JuliaCall."""
     backend = backend_path()
-    load_backend()
+    load_backend(instantiate=True)
     print(f"Julia backend ready: {backend}")
 
 

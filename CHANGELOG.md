@@ -7,6 +7,19 @@ Until then, entries are grouped under alpha releases.
 
 ## Unreleased
 
+## 0.1.0a3 - 2026-05-22
+
+- Reworked the README opening into a scientist-facing package pitch with CI,
+  Python-version, license, docs, and PyPI badges.
+- Added a benchmark summary figure to the README and performance docs using
+  the documented QuTiP comparison and a new MCWF trajectory benchmark against
+  QuTiP.
+- Added `benchmarks/bench_mcsolve_vs_qutip.py` for reproducible trajectory
+  scaling checks against QuTiP.
+- Added Colab links for public tutorial notebooks.
+- Added a Dicke synchronization notebook demonstrating collective-spin
+  dynamics in the symmetric Dicke manifold.
+
 ## 0.1.0a2 - 2026-05-22
 
 - Published a cleaner public documentation set through GitHub Pages, including

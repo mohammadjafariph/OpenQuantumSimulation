@@ -33,6 +33,7 @@ def test_tutorial_notebooks_are_valid_and_clear() -> None:
         "02_parameter_sweep.ipynb",
         "03_phase_space_plotting.ipynb",
         "04_state_metrics_observables.ipynb",
+        "05_dicke_synchronization.ipynb",
     ]
     for path in notebooks:
         notebook = json.loads(path.read_text(encoding="utf-8"))
@@ -93,6 +94,15 @@ def test_qubit_decay_tutorial_is_public_entrypoint() -> None:
     assert "oqs.mcsolve" in tutorial
 
 
+def test_tutorial_index_links_colab_and_dicke_notebook() -> None:
+    text = (ROOT / "docs" / "tutorials" / "index.rst").read_text(encoding="utf-8")
+
+    assert "colab.research.google.com" in text
+    assert "01_qubit_decay_mesolve.ipynb" in text
+    assert "05_dicke_synchronization.ipynb" in text
+    assert "05_dicke_synchronization" in text
+
+
 def test_sphinx_excludes_internal_maintainer_pages() -> None:
     text = (ROOT / "docs" / "conf.py").read_text(encoding="utf-8")
 
@@ -115,6 +125,7 @@ def test_performance_page_documents_benchmark_environment() -> None:
     assert "Performance Benchmarks" in text
     assert "Apple M1" in text
     assert "benchmarks/bench_vs_qutip.py" in text
+    assert "benchmarks/bench_mcsolve_vs_qutip.py" in text
     assert "JULIA_NUM_THREADS=4" in text
     assert "Reproducing Results" in text
 

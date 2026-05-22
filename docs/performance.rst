@@ -6,6 +6,9 @@ numbers below are not a universal leaderboard; they document one hardware and
 software configuration so future benchmark results can be compared against the
 same reference point.
 
+.. image:: _static/benchmarks/readme_benchmark_summary.png
+   :alt: OpenQuantumSim benchmark summary comparing deterministic QuTiP speedups and MCWF backend threading.
+
 Benchmark Environment
 ---------------------
 
@@ -217,6 +220,63 @@ Command:
      - 8.52 ms (``ode``)
      - 1.34x
      - 4.71e-08
+
+Monte Carlo Wave Functions: OpenQuantumSim vs QuTiP
+---------------------------------------------------
+
+Command:
+
+.. code-block:: bash
+
+   PYTHON_JULIACALL_HANDLE_SIGNALS=yes JULIA_NUM_THREADS=4 \
+   python benchmarks/bench_mcsolve_vs_qutip.py \
+       --n-traj 50 200 1000 \
+       --time-points 31 \
+       --t-final 2.0 \
+       --max-step 0.02 \
+       --repeats 3 \
+       --json runs/benchmarks/bench_mcsolve_vs_qutip_m1_2026-05-22.json
+
+Settings: spontaneous-emission qubit, ``gamma=0.35``, one excited-state
+projector, QuTiP ``mcsolve`` with progress disabled, OpenQuantumSim ``mcsolve``
+with ``n_jobs=-1`` and four Julia threads.
+
+.. list-table::
+   :header-rows: 1
+
+   * - Trajectories
+     - QuTiP median
+     - OQS median
+     - OQS backend wall time
+     - Workers
+     - OQS vs QuTiP
+     - OQS backend vs QuTiP
+   * - 50
+     - 8.85 ms
+     - 1.79 ms
+     - 0.46 ms
+     - 4
+     - 4.96x
+     - 19.06x
+   * - 200
+     - 33.58 ms
+     - 3.22 ms
+     - 1.71 ms
+     - 4
+     - 10.44x
+     - 19.67x
+   * - 1000
+     - 168.01 ms
+     - 18.60 ms
+     - 17.25 ms
+     - 4
+     - 9.03x
+     - 9.74x
+
+Interpretation: for this MCWF smoke benchmark, threaded backend-side
+aggregation gives OpenQuantumSim a clear trajectory-throughput advantage over
+QuTiP after backend warmup. The exact speedup is workload-specific and should
+be re-measured for larger Hilbert spaces and more expensive observables.
 
 Monte Carlo Wave Function Scaling
 ---------------------------------

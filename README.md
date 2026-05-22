@@ -3,12 +3,23 @@
 [![CI](https://github.com/mohammadjafariph/OpenQuantumSimulation/actions/workflows/ci.yml/badge.svg)](https://github.com/mohammadjafariph/OpenQuantumSimulation/actions/workflows/ci.yml)
 [![Docs](https://github.com/mohammadjafariph/OpenQuantumSimulation/actions/workflows/docs.yml/badge.svg)](https://github.com/mohammadjafariph/OpenQuantumSimulation/actions/workflows/docs.yml)
 [![PyPI](https://img.shields.io/pypi/v/openquantumsim.svg)](https://pypi.org/project/openquantumsim/)
+[![Python](https://img.shields.io/pypi/pyversions/openquantumsim.svg)](https://pypi.org/project/openquantumsim/)
+[![License](https://img.shields.io/pypi/l/openquantumsim.svg)](LICENSE)
 
-OpenQuantumSim is a Python package for simulating open quantum systems with a
-Julia backend for numerical propagation. It provides a Python-first interface
-for constructing Hilbert spaces, states, operators, Lindblad models,
-Monte Carlo wave-function trajectories, observables, parameter sweeps, and
-common state diagnostics.
+QuTiP is excellent general-purpose quantum dynamics software. OpenQuantumSim is
+for researchers who want a Python interface while moving expensive open-system
+propagation into a Julia backend: Lindblad solvers, Monte Carlo wave-function
+trajectories, Dicke-space collective spins, restartable parameter sweeps, HDF5
+outputs, phase-space tools, and state diagnostics in one package.
+
+On the current Apple M1 benchmark snapshot, OpenQuantumSim is 1.3x-2.6x faster
+than QuTiP on deterministic Lindblad reference cases up to Hilbert dimension 80.
+For a qubit MCWF trajectory scaling smoke test, OpenQuantumSim is 5.0x-10.4x
+faster end-to-end than QuTiP, with 9.7x-19.7x faster Julia backend trajectory
+aggregation when using four Julia threads. The benchmark commands and
+environment are documented so these numbers can be reproduced and challenged.
+
+![OpenQuantumSim benchmark summary](https://raw.githubusercontent.com/mohammadjafariph/OpenQuantumSimulation/main/docs/_static/benchmarks/readme_benchmark_summary.png)
 
 Documentation: https://mohammadjafariph.github.io/OpenQuantumSimulation/
 
@@ -94,6 +105,12 @@ Each one supports a quick smoke run:
 python examples/gallery/qubit_decay.py --fast
 python examples/gallery/phase_space.py --fast
 ```
+
+Tutorial notebooks are available in the documentation, including qubit decay,
+Dicke synchronization, parameter sweeps, phase-space plots, and state metrics:
+
+- [Qubit decay notebook](https://colab.research.google.com/github/mohammadjafariph/OpenQuantumSimulation/blob/main/docs/tutorials/01_qubit_decay_mesolve.ipynb)
+- [Dicke synchronization notebook](https://colab.research.google.com/github/mohammadjafariph/OpenQuantumSimulation/blob/main/docs/tutorials/05_dicke_synchronization.ipynb)
 
 ## Time-Dependent Hamiltonians
 

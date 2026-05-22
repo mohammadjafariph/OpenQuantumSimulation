@@ -85,6 +85,16 @@ assert np.allclose(result.expect[0].real, expected, atol=2e-7)
 print(result.expect[0].real)
 ```
 
+More complete scripts are available under `examples/gallery/`, including
+deterministic decay, a time-dependent driven qubit, Jaynes-Cummings dynamics,
+Monte Carlo trajectories, phase-space plots, and restartable parameter sweeps.
+Each one supports a quick smoke run:
+
+```bash
+python examples/gallery/qubit_decay.py --fast
+python examples/gallery/phase_space.py --fast
+```
+
 ## Time-Dependent Hamiltonians
 
 Time-dependent systems can be written as

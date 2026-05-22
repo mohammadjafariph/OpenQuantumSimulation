@@ -58,9 +58,25 @@ def test_public_docs_index_excludes_internal_release_notes() -> None:
     text = (ROOT / "docs" / "index.rst").read_text(encoding="utf-8")
 
     assert "quickstart" in text
+    assert "examples" in text
     assert "publishing" not in text
     assert "release_checklist" not in text
     assert "quickstart_validation" not in text
+
+
+def test_example_gallery_documents_public_scripts() -> None:
+    text = (ROOT / "docs" / "examples.rst").read_text(encoding="utf-8")
+
+    expected = [
+        "examples/gallery/qubit_decay.py",
+        "examples/gallery/driven_qubit.py",
+        "examples/gallery/jaynes_cummings.py",
+        "examples/gallery/quantum_trajectory.py",
+        "examples/gallery/phase_space.py",
+        "examples/gallery/parameter_sweep.py",
+    ]
+    for script in expected:
+        assert script in text
 
 
 def test_qubit_decay_tutorial_is_public_entrypoint() -> None:

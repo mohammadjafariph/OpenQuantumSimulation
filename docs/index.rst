@@ -8,6 +8,7 @@ simulation.
    :maxdepth: 2
 
    quickstart
+   examples
    api/index
    tutorials/index
    theory/index

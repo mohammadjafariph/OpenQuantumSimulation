@@ -9,8 +9,8 @@ indexes is manually gated through PyPI trusted publishing.
 Current Release State
 ---------------------
 
-``v0.1.0a1`` is published on PyPI and TestPyPI, and both package indexes passed
-clean install smoke tests. ``v0.1.0a2`` is the next package-index candidate.
+``v0.1.0a2`` is published on PyPI and TestPyPI, and both package indexes passed
+clean install smoke tests from fresh virtual environments.
 ``v0.1.0a0`` remains a GitHub-only alpha artifact
 because its package metadata was rejected by PyPI. TestPyPI trusted publishing
 was configured successfully after an initial setup miss:
@@ -28,6 +28,11 @@ the ``v0.1.0a0`` metadata because ``Programming Language :: Julia`` is not a
 valid trove classifier. ``v0.1.0a1`` removes that classifier and is the first
 package index candidate. It was published to TestPyPI and verified from a fresh
 virtual environment on 2026-05-15.
+
+``v0.1.0a2`` refreshes the public README/docs, release notes, packaging checks,
+and backend startup path. It was published to TestPyPI and PyPI on 2026-05-22,
+then verified from fresh virtual environments with the packaged Julia backend
+loaded from ``site-packages``.
 
 Trusted Publisher Settings
 --------------------------
@@ -98,4 +103,4 @@ Then verify installation from PyPI:
        --index pypi \
        --version 0.1.0a2
 
-This verification passed for ``v0.1.0a1`` on 2026-05-15.
+This verification passed for ``v0.1.0a2`` on 2026-05-22.

@@ -31,7 +31,7 @@ Benchmark Environment
    * - ``julia --version``
      - 1.12.5
    * - OpenQuantumSim
-     - 0.1.0a1
+     - 0.1.0a2
    * - QuTiP
      - 5.2.3
    * - NumPy / SciPy / h5py

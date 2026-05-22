@@ -7,6 +7,25 @@ Until then, entries are grouped under alpha releases.
 
 ## Unreleased
 
+## 0.1.0a2 - 2026-05-22
+
+- Published a cleaner public documentation set through GitHub Pages, including
+  API references, tutorials, validation notes, performance notes, and the HDF5
+  result schema.
+- Replaced older README/release text with user-facing package documentation
+  suitable for PyPI.
+- Added a five-minute qubit-decay tutorial as the first public getting-started
+  path.
+- Reduced Python wrapper overhead in solver-stat conversion; in the local
+  benchmark, 100 warm qubit-decay `mesolve` calls dropped from 0.671 s to
+  0.050 s.
+- Reduced normal Julia backend startup overhead by skipping package
+  instantiation on routine solver loads and keeping forced instantiation in
+  `setup_julia.py`.
+- Replaced the broad Julia `DifferentialEquations` dependency with
+  `OrdinaryDiffEq` for the backend code path used by the solvers.
+- Added larger Jaynes-Cummings performance spot checks against QuTiP.
+
 ## 0.1.0a1 - 2026-05-15
 
 - Removed an invalid PyPI trove classifier from the package metadata so the

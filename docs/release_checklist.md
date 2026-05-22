@@ -7,14 +7,15 @@ green. This file is the standing answer to: "Is it ready to publish yet?"
 
 Status: public alpha published. The public alpha and public beta gates are
 green. `v0.1.0a1` is published on PyPI and TestPyPI and passed installed-wheel
-backend smoke tests from fresh virtual environments.
+backend smoke tests from fresh virtual environments. The next package-index
+candidate is `v0.1.0a2`.
 
-Latest package-index candidate: `v0.1.0a1`.
+Latest package-index candidate: `v0.1.0a2`.
 GitHub-only alpha tag: `v0.1.0a0` on commit `ebf41f5`.
 Latest green public CI for the release commit: run #11 on commit `ebf41f5`,
 completed on 2026-05-14.
 Latest local artifact check: wheel/sdist build, `twine check`, and installed
-wheel Julia-backend smoke test passed on 2026-05-14.
+wheel Julia-backend smoke test for `0.1.0a2` passed on 2026-05-22.
 Latest TestPyPI publish: workflow run `25931648325` built artifacts, updated
 the GitHub Release, and published `openquantumsim==0.1.0a1` to TestPyPI on
 2026-05-15.
@@ -24,6 +25,12 @@ Latest PyPI publish: workflow run `25932832939` built artifacts, updated the
 GitHub Release, and published `openquantumsim==0.1.0a1` to PyPI on 2026-05-15.
 Latest PyPI install check: `python scripts/check_index_install.py --index pypi
 --version 0.1.0a1` passed on 2026-05-15.
+
+Next release preparation: `v0.1.0a2` should be built from the release-prep
+commit, published to TestPyPI first, verified with
+`python scripts/check_index_install.py --index testpypi --version 0.1.0a2`,
+then published to PyPI and verified with
+`python scripts/check_index_install.py --index pypi --version 0.1.0a2`.
 
 ## Public Alpha Gate
 

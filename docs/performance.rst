@@ -15,9 +15,9 @@ Benchmark Environment
    * - Item
      - Value
    * - Date
-     - 2026-05-14
+     - 2026-05-22
    * - OpenQuantumSim commit
-     - ``e27d402``
+     - stats-conversion optimization snapshot
    * - CPU
      - Apple M1
    * - Logical CPU count
@@ -31,7 +31,7 @@ Benchmark Environment
    * - ``julia --version``
      - 1.12.5
    * - OpenQuantumSim
-     - 0.1.0a0
+     - 0.1.0a1
    * - QuTiP
      - 5.2.3
    * - NumPy / SciPy / h5py
@@ -46,12 +46,12 @@ Command:
 
    MPLCONFIGDIR=/private/tmp/oqs-mpl \
    python benchmarks/bench_vs_qutip.py \
-       --repeats 3 \
+       --repeats 5 \
        --time-points 81 \
        --t-final 6.0 \
        --cases qubit jc5 jc10 \
        --oqs-methods auto krylov ode \
-       --json runs/benchmarks/bench_vs_qutip_m1_2026-05-14.json
+       --json runs/benchmarks/bench_vs_qutip_after_stats.json
 
 Settings: ``rtol=1e-8``, ``atol=1e-10``. OpenQuantumSim used the default
 single-threaded backend process for this deterministic benchmark.
@@ -68,30 +68,54 @@ single-threaded backend process for this deterministic benchmark.
      - Max expectation delta
    * - Qubit decay
      - 2
-     - 1.108 ms
-     - 5.931 ms
-     - 5.880 ms (``ode``)
-     - 0.19x
+     - 1.43 ms
+     - 1.00 ms
+     - 0.77 ms (``ode``)
+     - 1.42x
      - 7.49e-09
    * - Jaynes-Cummings 5
      - 10
-     - 1.344 ms
-     - 5.693 ms
-     - 5.622 ms (``ode``)
-     - 0.24x
+     - 2.18 ms
+     - 1.14 ms
+     - 1.14 ms (``auto``)
+     - 1.90x
      - 1.21e-09
    * - Jaynes-Cummings 10
      - 20
-     - 1.853 ms
-     - 6.390 ms
-     - 6.068 ms (``ode``)
-     - 0.29x
+     - 6.71 ms
+     - 2.60 ms
+     - 2.08 ms (``ode``)
+     - 2.58x
      - 7.23e-09
 
-Interpretation: QuTiP is faster for these small deterministic systems. In this
-regime, OpenQuantumSim wall time is dominated by Python-to-Julia overhead and
-solver setup, while expectation values agree with QuTiP at about ``1e-9`` to
-``1e-8``.
+Interpretation: after reducing solver-stat conversion overhead at the
+Python-Julia boundary, OpenQuantumSim is faster than QuTiP for these small
+deterministic benchmark cases on this machine. Expectation values agree with
+QuTiP at about ``1e-9`` to ``1e-8``.
+
+Python Wrapper Profile
+----------------------
+
+The main small-system bottleneck was not the Julia integrator. It was repeated
+Python-side probing of optional fields in the Julia ``NamedTuple`` used for
+``Result.solver_stats``. The conversion now uses the fields reported by
+``dir(...)`` and avoids exception-heavy lookups for fields that are not present.
+
+.. list-table::
+   :header-rows: 1
+
+   * - Profile
+     - Workload
+     - Python-visible cumulative time
+     - Solver-stat conversion time
+   * - Before
+     - 100 warm qubit-decay ``mesolve`` calls
+     - 0.671 s
+     - 0.601 s
+   * - After
+     - 100 warm qubit-decay ``mesolve`` calls
+     - 0.050 s
+     - 0.007 s
 
 Monte Carlo Wave Function Scaling
 ---------------------------------

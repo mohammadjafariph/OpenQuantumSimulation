@@ -662,43 +662,43 @@ def _ket_states(raw_states: Array, n_times: int) -> list[Array]:
     return [raw_states[:, idx].copy() for idx in range(raw_states.shape[1])]
 
 
-def _optional_field(raw: object, name: str) -> object | None:
-    try:
-        return cast(object, getattr(raw, name))
-    except Exception:
-        try:
-            return cast(object, raw[name])  # type: ignore[index]
-        except Exception:
-            return None
+_SOLVER_STAT_NAMES = (
+    "nsteps",
+    "nfev",
+    "wall_time",
+    "retcode",
+    "n_traj",
+    "max_step",
+    "n_jobs_requested",
+    "n_workers",
+    "threaded",
+    "checkpoint_file",
+    "checkpoint_every",
+    "checkpoint_completed",
+    "checkpoint_start_completed",
+    "checkpoint_previous_target_n_traj",
+    "progress",
+    "resumed",
+    "method",
+    "requested_method",
+    "krylov_dim",
+    "compute_entropy",
+    "time_dependent",
+)
 
 
 def _to_python_dict(raw: object) -> dict[str, object]:
-    names = (
-        "nsteps",
-        "nfev",
-        "wall_time",
-        "retcode",
-        "n_traj",
-        "max_step",
-        "n_jobs_requested",
-        "n_workers",
-        "threaded",
-        "checkpoint_file",
-        "checkpoint_every",
-        "checkpoint_completed",
-        "checkpoint_start_completed",
-        "checkpoint_previous_target_n_traj",
-        "progress",
-        "resumed",
-        "method",
-        "requested_method",
-        "krylov_dim",
-        "compute_entropy",
-        "time_dependent",
-    )
+    if isinstance(raw, Mapping):
+        return dict(raw)
+
+    try:
+        present = set(dir(raw))
+    except Exception:
+        present = set(_SOLVER_STAT_NAMES)
+
     values: dict[str, object] = {}
-    for name in names:
-        value = _optional_field(raw, name)
-        if value is not None:
-            values[name] = value
+    for name in _SOLVER_STAT_NAMES:
+        if name not in present:
+            continue
+        values[name] = getattr(raw, name)
     return values

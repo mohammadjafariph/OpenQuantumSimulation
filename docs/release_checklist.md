@@ -6,26 +6,26 @@ green. This file is the standing answer to: "Is it ready to publish yet?"
 ## Current Status
 
 Status: public alpha published. The public alpha and public beta gates are
-green. `v0.1.0a2` is published on PyPI and TestPyPI and passed installed-wheel
+green. `v0.1.0a4` is published on PyPI and TestPyPI and passed installed-wheel
 backend smoke tests from fresh virtual environments.
 
-Latest package-index release: `v0.1.0a2`.
+Latest package-index release: `v0.1.0a4`.
 GitHub-only alpha tag: `v0.1.0a0` on commit `ebf41f5`.
-Latest green public CI for the release commit: run #22 on commit `a1a7fb0`,
-completed on 2026-05-22.
-Latest local artifact check: wheel/sdist build, `twine check`, and installed
-wheel Julia-backend smoke test for `0.1.0a2` passed on 2026-05-22.
-Latest GitHub Release build: workflow run `26309342483` built artifacts and
-updated the `v0.1.0a2` GitHub Release on 2026-05-22.
-Latest TestPyPI publish: workflow run `26309388439` built artifacts, updated
-the GitHub Release, and published `openquantumsim==0.1.0a2` to TestPyPI on
-2026-05-22.
+Latest green public CI for the release commit: workflow run `26468722724` on
+commit `66ab874`, completed on 2026-05-26.
+Latest local artifact check: docs build, wheel/sdist build, and `twine check`
+for `0.1.0a4` passed on 2026-05-26.
+Latest GitHub Release build: workflow run `26468915101` built artifacts and
+updated the `v0.1.0a4` GitHub Release on 2026-05-26.
+Latest TestPyPI publish: workflow run `26468776853` built artifacts, updated
+the GitHub Release, and published `openquantumsim==0.1.0a4` to TestPyPI on
+2026-05-26.
 Latest TestPyPI install check: `python scripts/check_index_install.py --index
-testpypi --version 0.1.0a2` passed on 2026-05-22.
-Latest PyPI publish: workflow run `26309519864` built artifacts, updated the
-GitHub Release, and published `openquantumsim==0.1.0a2` to PyPI on 2026-05-22.
+testpypi --version 0.1.0a4` passed on 2026-05-26.
+Latest PyPI publish: workflow run `26468915101` built artifacts, updated the
+GitHub Release, and published `openquantumsim==0.1.0a4` to PyPI on 2026-05-26.
 Latest PyPI install check: `python scripts/check_index_install.py --index pypi
---version 0.1.0a2` passed on 2026-05-22.
+--version 0.1.0a4` passed on 2026-05-26.
 
 ## Public Alpha Gate
 

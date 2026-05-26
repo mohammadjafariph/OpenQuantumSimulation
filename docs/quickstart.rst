@@ -11,6 +11,28 @@ OpenQuantumSim uses JuliaCall to load the packaged Julia backend. The first
 solver call on a new machine may spend a few minutes resolving and precompiling
 Julia packages.
 
+Backend Setup and Startup Speed
+-------------------------------
+
+Run the backend setup once after installing OpenQuantumSim:
+
+.. code-block:: bash
+
+   oqs setup-julia
+
+This moves Julia package resolution and precompilation out of the first solver
+call. For repeated simulation sessions, build a local Julia sysimage:
+
+.. code-block:: bash
+
+   oqs build-sysimage
+
+The sysimage build can take several minutes, but future solver calls
+automatically reuse it through JuliaCall. Rebuild it after upgrading Julia or
+OpenQuantumSim. Set ``OPENQUANTUMSIM_USE_SYSIMAGE=0`` to disable automatic
+sysimage use for a process, or set ``OPENQUANTUMSIM_JULIA_SYSIMAGE`` to point
+at a custom sysimage.
+
 Spontaneous Emission
 --------------------
 
@@ -55,7 +77,7 @@ For local development from source:
    git clone https://github.com/mohammadjafariph/OpenQuantumSimulation.git
    cd OpenQuantumSimulation
    python -m pip install -e ".[dev]"
-   python setup_julia.py
+   oqs setup-julia
 
 Run the Python and Julia tests with:
 

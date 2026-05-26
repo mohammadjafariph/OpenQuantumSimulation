@@ -134,6 +134,8 @@ def test_quickstart_page_documents_install_and_smoke_test() -> None:
     text = (ROOT / "docs" / "quickstart.rst").read_text(encoding="utf-8")
 
     assert "python -m pip install openquantumsim" in text
+    assert "oqs setup-julia" in text
+    assert "oqs build-sysimage" in text
     assert "Spontaneous Emission" in text
     assert "np.allclose" in text
 

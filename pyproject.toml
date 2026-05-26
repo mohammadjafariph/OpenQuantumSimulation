@@ -55,6 +55,9 @@ Issues = "https://github.com/mohammadjafariph/OpenQuantumSimulation/issues"
 Documentation = "https://mohammadjafariph.github.io/OpenQuantumSimulation/"
 Source = "https://github.com/mohammadjafariph/OpenQuantumSimulation"
 
+[project.scripts]
+oqs = "openquantumsim.cli:main"
+
 [tool.setuptools.packages.find]
 include = ["openquantumsim*"]
 

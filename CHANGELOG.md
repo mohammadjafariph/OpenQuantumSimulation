@@ -7,6 +7,13 @@ Until then, entries are grouped under alpha releases.
 
 ## Unreleased
 
+- Added the `oqs` command-line entry point with `oqs setup-julia` for explicit
+  one-time backend precompilation.
+- Added `oqs build-sysimage`, which builds and registers a local Julia sysimage
+  for faster repeated solver startup.
+- Added automatic cached-sysimage discovery before JuliaCall is imported, with
+  `OPENQUANTUMSIM_USE_SYSIMAGE=0` and `OPENQUANTUMSIM_JULIA_SYSIMAGE` overrides.
+
 ## 0.1.0a3 - 2026-05-22
 
 - Reworked the README opening into a scientist-facing package pitch with CI,

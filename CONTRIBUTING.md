@@ -8,7 +8,7 @@ easier to install.
 
 ```bash
 python -m pip install -e ".[dev]"
-python setup_julia.py
+oqs setup-julia
 python -m pytest
 ```
 

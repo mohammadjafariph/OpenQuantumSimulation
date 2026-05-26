@@ -41,7 +41,7 @@ Commands
    cd /private/tmp/oqs-quickstart-20260514c
    python3 -m venv .venv
    .venv/bin/python -m pip install -e .
-   .venv/bin/python setup_julia.py
+   .venv/bin/oqs setup-julia
 
 The first backend setup precompiled the Julia SciML stack. On the Apple M1 test
 machine this took about two minutes and ended with:

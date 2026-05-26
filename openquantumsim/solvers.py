@@ -66,7 +66,7 @@ def mesolve(
     try:
         backend = load_backend()
     except JuliaBridgeUnavailable as exc:
-        msg = "mesolve requires the Julia backend; run setup_julia.py first."
+        msg = "mesolve requires the Julia backend; run `oqs setup-julia` first."
         raise NotImplementedError(msg) from exc
 
     if isinstance(H, TimeDependentHamiltonian):
@@ -184,7 +184,7 @@ def mcsolve(
     try:
         backend = load_backend()
     except JuliaBridgeUnavailable as exc:
-        msg = "mcsolve requires the Julia backend; run setup_julia.py first."
+        msg = "mcsolve requires the Julia backend; run `oqs setup-julia` first."
         raise NotImplementedError(msg) from exc
 
     raw = backend.mcsolve(
@@ -279,7 +279,10 @@ def single_trajectory(
     try:
         backend = load_backend()
     except JuliaBridgeUnavailable as exc:
-        msg = "single_trajectory requires the Julia backend; run setup_julia.py first."
+        msg = (
+            "single_trajectory requires the Julia backend; "
+            "run `oqs setup-julia` first."
+        )
         raise NotImplementedError(msg) from exc
 
     raw = backend.single_trajectory(
@@ -346,7 +349,7 @@ def steadystate(
     try:
         backend = load_backend()
     except JuliaBridgeUnavailable as exc:
-        msg = "steadystate requires the Julia backend; run setup_julia.py first."
+        msg = "steadystate requires the Julia backend; run `oqs setup-julia` first."
         raise NotImplementedError(msg) from exc
     raw = backend.steadystate(
         _matrix_payload(backend, H.data),

@@ -152,7 +152,7 @@ Command:
 
 The profile below measures a fresh Python process after the Julia backend has
 already been set up once. Normal runtime loads now skip ``Pkg.instantiate()``
-unless loading the backend fails; ``setup_julia.py`` still forces
+unless loading the backend fails; ``oqs setup-julia`` still forces
 instantiation for installation validation.
 
 .. list-table::

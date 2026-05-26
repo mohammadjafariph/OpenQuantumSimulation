@@ -39,7 +39,10 @@ def correlation_2op_1t(
     try:
         backend = load_backend()
     except JuliaBridgeUnavailable as exc:
-        msg = "correlation_2op_1t requires the Julia backend; run setup_julia.py first."
+        msg = (
+            "correlation_2op_1t requires the Julia backend; "
+            "run `oqs setup-julia` first."
+        )
         raise NotImplementedError(msg) from exc
 
     raw = backend.correlation_2op_1t(
@@ -80,7 +83,10 @@ def correlation_2op_2t(
     try:
         backend = load_backend()
     except JuliaBridgeUnavailable as exc:
-        msg = "correlation_2op_2t requires the Julia backend; run setup_julia.py first."
+        msg = (
+            "correlation_2op_2t requires the Julia backend; "
+            "run `oqs setup-julia` first."
+        )
         raise NotImplementedError(msg) from exc
 
     raw = backend.correlation_2op_2t(

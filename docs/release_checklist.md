@@ -6,26 +6,26 @@ green. This file is the standing answer to: "Is it ready to publish yet?"
 ## Current Status
 
 Status: public alpha published. The public alpha and public beta gates are
-green. `v0.1.0a4` is published on PyPI and TestPyPI and passed installed-wheel
+green. `v0.1.0a5` is published on PyPI and TestPyPI and passed installed-wheel
 backend smoke tests from fresh virtual environments.
 
-Latest package-index release: `v0.1.0a4`.
+Latest package-index release: `v0.1.0a5`.
 GitHub-only alpha tag: `v0.1.0a0` on commit `ebf41f5`.
-Latest green public CI for the release commit: workflow run `26468722724` on
-commit `66ab874`, completed on 2026-05-26.
+Latest green public CI for the release commit: workflow run `26550977112` on
+commit `bcedc8f`, completed on 2026-05-28.
 Latest local artifact check: docs build, wheel/sdist build, and `twine check`
-for `0.1.0a4` passed on 2026-05-26.
-Latest GitHub Release build: workflow run `26468915101` built artifacts and
-updated the `v0.1.0a4` GitHub Release on 2026-05-26.
-Latest TestPyPI publish: workflow run `26468776853` built artifacts, updated
-the GitHub Release, and published `openquantumsim==0.1.0a4` to TestPyPI on
-2026-05-26.
+for `0.1.0a5` passed on 2026-05-28.
+Latest GitHub Release build: workflow run `26551282055` built artifacts and
+updated the `v0.1.0a5` GitHub Release on 2026-05-28.
+Latest TestPyPI publish: workflow run `26551316697` built artifacts, updated
+the GitHub Release, and published `openquantumsim==0.1.0a5` to TestPyPI on
+2026-05-28.
 Latest TestPyPI install check: `python scripts/check_index_install.py --index
-testpypi --version 0.1.0a4` passed on 2026-05-26.
-Latest PyPI publish: workflow run `26468915101` built artifacts, updated the
-GitHub Release, and published `openquantumsim==0.1.0a4` to PyPI on 2026-05-26.
+testpypi --version 0.1.0a5` passed on 2026-05-28.
+Latest PyPI publish: workflow run `26551408978` built artifacts, updated the
+GitHub Release, and published `openquantumsim==0.1.0a5` to PyPI on 2026-05-28.
 Latest PyPI install check: `python scripts/check_index_install.py --index pypi
---version 0.1.0a4` passed on 2026-05-26.
+--version 0.1.0a5` passed on 2026-05-28.
 
 ## Public Alpha Gate
 

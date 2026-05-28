@@ -9,7 +9,7 @@ indexes is manually gated through PyPI trusted publishing.
 Current Release State
 ---------------------
 
-``v0.1.0a4`` is published on PyPI and TestPyPI, and both package indexes passed
+``v0.1.0a5`` is published on PyPI and TestPyPI, and both package indexes passed
 clean install smoke tests from fresh virtual environments.
 ``v0.1.0a0`` remains a GitHub-only alpha artifact
 because its package metadata was rejected by PyPI. TestPyPI trusted publishing
@@ -38,6 +38,12 @@ loaded from ``site-packages``.
 setup, and local sysimage support for faster repeated solver startup. It was
 published to TestPyPI and PyPI on 2026-05-26, then verified from fresh virtual
 environments with the packaged Julia backend loaded from ``site-packages``.
+
+``v0.1.0a5`` validates generated sysimages before registering them, removes the
+Julia backend's direct ``PythonCall`` dependency so sysimage startup is stable,
+and documents a local startup benchmark. It was published to TestPyPI and PyPI
+on 2026-05-28, then verified from fresh virtual environments with the packaged
+Julia backend loaded from ``site-packages``.
 
 Trusted Publisher Settings
 --------------------------
@@ -72,7 +78,7 @@ Run the release workflow manually for the existing tag:
 .. code-block:: bash
 
    gh workflow run release.yml \
-       -f tag=v0.1.0a4 \
+       -f tag=v0.1.0a5 \
        -f publish_target=testpypi \
        --repo mohammadjafariph/OpenQuantumSimulation
 
@@ -82,7 +88,7 @@ Then verify installation from TestPyPI:
 
    python scripts/check_index_install.py \
        --index testpypi \
-       --version 0.1.0a4
+       --version 0.1.0a5
 
 The script installs the published package into a fresh virtual environment,
 loads the packaged Julia backend from ``site-packages``, and runs a tiny
@@ -96,7 +102,7 @@ Only publish to PyPI after TestPyPI installation passes:
 .. code-block:: bash
 
    gh workflow run release.yml \
-       -f tag=v0.1.0a4 \
+       -f tag=v0.1.0a5 \
        -f publish_target=pypi \
        --repo mohammadjafariph/OpenQuantumSimulation
 
@@ -106,6 +112,6 @@ Then verify installation from PyPI:
 
    python scripts/check_index_install.py \
        --index pypi \
-       --version 0.1.0a4
+       --version 0.1.0a5
 
-This verification passed for ``v0.1.0a4`` on 2026-05-26.
+This verification passed for ``v0.1.0a5`` on 2026-05-28.

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "openquantumsim"
-version = "0.1.0a4"
+version = "0.1.0a5"
 description = "Python-accessible, Julia-powered simulation tools for open quantum systems."
 readme = "README.md"
 requires-python = ">=3.10"

@@ -7,6 +7,17 @@ Until then, entries are grouped under alpha releases.
 
 ## Unreleased
 
+## 0.1.0a5 - 2026-05-27
+
+- Made `oqs build-sysimage` validate the generated sysimage with a fresh
+  JuliaCall subprocess before registering it for automatic reuse.
+- Removed the hard Julia-backend dependency on `PythonCall` so local sysimages
+  do not bake PythonCall into the OpenQuantumSim backend image.
+- Kept Python callable coefficients working by converting callback return
+  values through JuliaCall's already-loaded PythonCall module at runtime.
+- Added a startup/sysimage benchmark harness with partial JSON reports on
+  failed runs.
+
 ## 0.1.0a4 - 2026-05-26
 
 - Added the `oqs` command-line entry point with `oqs setup-julia` for explicit

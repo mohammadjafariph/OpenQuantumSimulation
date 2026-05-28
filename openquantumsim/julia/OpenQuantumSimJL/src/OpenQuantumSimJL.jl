@@ -5,7 +5,6 @@ using SparseArrays
 using OrdinaryDiffEq
 using KrylovKit
 using HDF5
-using PythonCall
 using SHA
 using SpecialFunctions
 

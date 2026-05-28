@@ -180,6 +180,52 @@ instantiation for installation validation.
 The same change also suppresses routine Julia package-manager output during
 normal solver calls.
 
+Local Sysimage Startup
+----------------------
+
+For repeated solver sessions, ``oqs build-sysimage`` compiles the packaged Julia
+backend into a local sysimage and validates it with a fresh JuliaCall process
+before it is registered for automatic reuse.
+
+Command:
+
+.. code-block:: bash
+
+   python benchmarks/bench_startup_sysimage.py \
+       --install-local . \
+       --repeats 1 \
+       --json runs/benchmarks/bench_startup_sysimage_0.1.0a5_m1_2026-05-27.json
+
+Apple M1, Python 3.14.3, Julia 1.11.9, single Julia thread:
+
+.. list-table::
+   :header-rows: 1
+
+   * - Profile
+     - ``get_julia()``
+     - ``load_backend()``
+     - First ``mesolve``
+     - Total
+   * - Cold, no setup
+     - 17.465 s
+     - 20.773 s
+     - 20.336 s
+     - 72.315 s
+   * - Warm, no sysimage
+     - 2.301 s
+     - 10.407 s
+     - 13.711 s
+     - 26.940 s
+   * - Warm, validated sysimage
+     - 4.756 s
+     - 3.570 s
+     - 3.894 s
+     - 12.767 s
+
+The sysimage build took 692.064 s and produced a 543 MB image on this machine.
+The warm sysimage profile was 2.1x faster end-to-end than warm startup without
+a sysimage, with the first solver call itself 3.5x faster.
+
 Larger Deterministic Spot Checks
 --------------------------------
 

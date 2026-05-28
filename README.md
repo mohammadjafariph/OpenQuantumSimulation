@@ -43,7 +43,8 @@ oqs setup-julia
 ```
 
 For repeated simulations, build a local Julia sysimage. This can take several
-minutes once, but future solver calls automatically reuse it:
+minutes once. The command validates the generated image with JuliaCall before
+registering it, and future solver calls automatically reuse it:
 
 ```bash
 oqs build-sysimage

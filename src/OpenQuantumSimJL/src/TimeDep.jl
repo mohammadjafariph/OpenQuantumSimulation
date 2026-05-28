@@ -29,11 +29,20 @@ function (coefficient::InterpolatedCoefficient)(t::Real)::ComplexF64
     return (1 - weight) * coefficient.values[idx] + weight * coefficient.values[idx + 1]
 end
 
+function _as_complex64(value)::ComplexF64
+    value isa Number && return ComplexF64(value)
+    for (pkgid, mod) in Base.loaded_modules
+        if string(pkgid.name) == "PythonCall" && isdefined(mod, :pyconvert)
+            return getproperty(mod, :pyconvert)(ComplexF64, value)
+        end
+    end
+    return ComplexF64(value)
+end
+
 function _coefficient_value(coefficient, t::Real)::ComplexF64
     coefficient isa Number && return ComplexF64(coefficient)
     value = coefficient(Float64(t))
-    value isa Number && return ComplexF64(value)
-    return pyconvert(ComplexF64, value)
+    return _as_complex64(value)
 end
 
 function _hamiltonian_at!(

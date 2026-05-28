@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -54,3 +55,35 @@ def test_packagecompiler_script_includes_backend_and_output(tmp_path: Path) -> N
     assert f'sysimage_path="{tmp_path / "sysimage.so"}"' in script
     assert f'precompile_execution_file="{tmp_path / "precompile.jl"}' in script
     assert 'cpu_target="generic"' in script
+
+
+def test_validate_sysimage_uses_juliacall_subprocess(
+    monkeypatch: Any,
+    tmp_path: Path,
+) -> None:
+    calls: list[dict[str, Any]] = []
+    sysimage = tmp_path / "sysimage.so"
+
+    def fake_run(
+        command: list[str],
+        *,
+        check: bool,
+        env: dict[str, str],
+    ) -> None:
+        calls.append({"command": command, "check": check, "env": env})
+
+    monkeypatch.delenv(cli.JULIACALL_SYSIMAGE_ENV, raising=False)
+    monkeypatch.delenv(cli.USE_SYSIMAGE_ENV, raising=False)
+    monkeypatch.delenv("JULIA_PYTHONCALL_EXE", raising=False)
+    monkeypatch.setattr(cli.subprocess, "run", fake_run)
+
+    cli._validate_sysimage(sysimage)
+
+    assert len(calls) == 1
+    assert calls[0]["command"][:2] == [sys.executable, "-c"]
+    assert calls[0]["check"] is True
+    env = calls[0]["env"]
+    assert env[cli.JULIACALL_SYSIMAGE_ENV] == str(sysimage)
+    assert env[cli.USE_SYSIMAGE_ENV] == "0"
+    assert env["JULIA_PYTHONCALL_EXE"] == sys.executable
+    assert env["PYTHON_JULIACALL_HANDLE_SIGNALS"] == "yes"

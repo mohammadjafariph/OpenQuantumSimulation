@@ -14,6 +14,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from ._julia_bridge import (
+    JULIACALL_SYSIMAGE_ENV,
+    USE_SYSIMAGE_ENV,
     backend_fingerprint,
     backend_path,
     cache_dir,
@@ -91,6 +93,7 @@ def build_sysimage_command(
         print(f"Julia: {julia} ({julia_version})")
         print(f"Output: {sysimage}")
         _run_julia(julia, script)
+        _validate_sysimage(sysimage)
 
         write_sysimage_metadata(
             {
@@ -185,6 +188,24 @@ def _run_julia(julia: str, script: str) -> None:
         check=True,
         env=_julia_subprocess_env(),
     )
+
+
+def _validate_sysimage(sysimage: Path) -> None:
+    """Verify that JuliaCall can initialize with the generated sysimage."""
+    print("Validating sysimage with JuliaCall.")
+    env = _julia_subprocess_env()
+    env[JULIACALL_SYSIMAGE_ENV] = str(sysimage)
+    env[USE_SYSIMAGE_ENV] = "0"
+    env.setdefault("PYTHON_JULIACALL_HANDLE_SIGNALS", "yes")
+    script = """
+from openquantumsim._julia_bridge import active_sysimage_path, load_backend
+
+load_backend()
+path = active_sysimage_path()
+assert path is not None
+print(f"Validated OpenQuantumSim Julia sysimage: {path}")
+"""
+    subprocess.run([sys.executable, "-c", script], check=True, env=env)
 
 
 def _julia_subprocess_env() -> dict[str, str]:

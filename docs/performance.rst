@@ -421,6 +421,55 @@ Each short-lived worker initializes its own Julia backend, so process
 parallelism is slower for small batches. Larger batches better amortize startup
 costs.
 
+Sparse Scaling (Hilbert Dimensions 512-2048)
+---------------------------------------------
+
+``benchmarks/bench_sparse_scaling.py`` measures ``mesolve`` on nearest-neighbour
+spin chains with local amplitude damping, where the Hamiltonian and collapse
+operators are sparse and the dimension grows as ``2**n_spins``. QuTiP timings
+are included when QuTiP is installed.
+
+Warm timings on a Windows 11 desktop (2026-09-30, backend precompiled;
+OpenQuantumSim 0.1.0a6 vs QuTiP 5.3.1; 21 time points, ``t_final=5``,
+``rtol=1e-6``, ``atol=1e-8``):
+
+.. list-table::
+   :header-rows: 1
+
+   * - Case
+     - Hilbert dim
+     - OpenQuantumSim
+     - QuTiP
+     - Speedup
+     - max abs delta expect
+   * - spin9
+     - 512
+     - 9.19 s
+     - 6.70 s
+     - 0.73x
+     - 1.2e-08
+   * - spin10
+     - 1024
+     - 75.9 s
+     - 51.2 s
+     - 0.68x
+     - 1.7e-08
+
+Both engines agree to about ``1e-8``. Interpretation: the OpenQuantumSim
+advantage documented for the dense reference cases (dimension up to 80) does
+not carry over to these sparse spin-chain cases at dimension 512-1024, where
+QuTiP is currently faster. Run the script yourself to reproduce or challenge
+these numbers:
+
+.. code-block:: bash
+
+   python benchmarks/bench_sparse_scaling.py --cases spin9 spin10 --json runs/sparse_scaling.json
+
+.. note::
+
+   Solving at dimension 2048 (``spin11``) needs several GB of free RAM for
+   dense state storage; avoid running it alongside other workloads.
+
 Reproducing Results
 -------------------
 

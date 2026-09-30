@@ -45,6 +45,16 @@ and documents a local startup benchmark. It was published to TestPyPI and PyPI
 on 2026-05-28, then verified from fresh virtual environments with the packaged
 Julia backend loaded from ``site-packages``.
 
+``v0.1.0a6`` adds the secular Bloch-Redfield solver ``brmesolve``, propagators
+and superoperator helpers, entanglement measures and spectra, a coupled-qubit
+gallery example, a sparse-scaling benchmark, and macOS in CI. It was published
+to TestPyPI and PyPI on 2026-09-30, then verified from fresh virtual
+environments with the packaged Julia backend loaded from ``site-packages``.
+On a memory-constrained machine, the fresh-venv install smoke test can fail
+while Julia precompiles ``SciMLBasePythonCallExt`` in parallel; running the
+check with ``JULIA_NUM_PRECOMPILE_TASKS=1`` avoids this (see the roadmap
+issue for follow-up work).
+
 Trusted Publisher Settings
 --------------------------
 
@@ -114,4 +124,5 @@ Then verify installation from PyPI:
        --index pypi \
        --version 0.1.0a5
 
-This verification passed for ``v0.1.0a5`` on 2026-05-28.
+This verification passed for ``v0.1.0a6`` on 2026-09-30 (with
+``JULIA_NUM_PRECOMPILE_TASKS=1`` on the verification machine).

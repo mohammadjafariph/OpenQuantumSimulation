@@ -7,6 +7,18 @@ Until then, entries are grouped under alpha releases.
 
 ## Unreleased
 
+- Added entanglement measures to `openquantumsim.observables`: `negativity`,
+  `logarithmic_negativity`, and `concurrence`, plus a `negativity_observable`
+  callback builder for solver runs.
+- Added `spectrum_correlation_fft` and `spectrum_2op_1t` to
+  `openquantumsim.correlations` for frequency-domain spectra of sampled
+  correlation functions via FFT.
+- Added `position`, `momentum`, `identity`, and `coherent_dm` operators.
+- `Operator` now supports scalar division (`op / x`); previously dividing an
+  operator returned a plain NumPy array instead of an `Operator`.
+- Fixed Windows path handling in the Julia bridge and `oqs` CLI: backend and
+  sysimage paths are normalized to posix form before reaching Julia.
+
 ## 0.1.0a5 - 2026-05-27
 
 - Made `oqs build-sysimage` validate the generated sysimage with a fresh

@@ -156,3 +156,42 @@ def test_two_ensemble_dicke_mutual_information_series() -> None:
     assert np.isclose(mi_b, 0.0)
     assert np.allclose(series_a, [0.0, 0.0])
     assert np.allclose(series_b, [0.0, 0.0])
+
+def test_quadrature_operators_satisfy_canonical_relations() -> None:
+    dim = 12
+    x = oqs.position(dim)
+    p = oqs.momentum(dim)
+    assert isinstance(x, oqs.Operator)
+    assert isinstance(p, oqs.Operator)
+    a = oqs.destroy(dim)
+    eye = oqs.identity(dim)
+
+    # x and p are hermitian quadratures built from a and a.dag().
+    x_expected = (a + a.dag()).to_numpy() / np.sqrt(2.0)
+    p_expected = -1j * (a - a.dag()).to_numpy() / np.sqrt(2.0)
+    np.testing.assert_allclose(x.to_numpy(), x_expected)
+    np.testing.assert_allclose(p.to_numpy(), p_expected)
+
+    # [x, p] = i I away from the truncation boundary; the last diagonal
+    # entry reflects the truncated [a, a^dagger] = I - dim |dim-1><dim-1|.
+    commutator = (x * p - p * x).to_numpy()
+    commuted_eye = 1j * eye.to_numpy()
+    commuted_eye[-1, -1] = 1j * (1.0 - dim)
+    np.testing.assert_allclose(commutator, commuted_eye, atol=1e-12)
+
+    # identity matches eye.
+    np.testing.assert_allclose(eye.to_numpy(), oqs.eye(dim).to_numpy())
+
+
+def test_coherent_dm_is_projector_with_poisson_numbers() -> None:
+    alpha = 1.3
+    rho = oqs.coherent_dm(20, alpha)
+    assert oqs.is_density_matrix(rho)
+    assert oqs.purity(rho) == pytest.approx(1.0, abs=1e-10)
+
+    n_op = oqs.num(20).to_numpy()
+    mean_n = float(np.real(np.trace(rho @ n_op)))
+    assert mean_n == pytest.approx(abs(alpha) ** 2, rel=1e-8)
+
+    coherent_ket_dm = oqs.ket2dm(oqs.coherent(20, alpha))
+    np.testing.assert_allclose(rho, coherent_ket_dm)

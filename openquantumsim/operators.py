@@ -83,6 +83,10 @@ class Operator:
     def __rmul__(self, other: complex | float | int) -> Operator:
         return Operator(complex(other) * self.data, self.space)
 
+    def __truediv__(self, other: complex | float | int) -> Operator:
+        """Divide by a scalar."""
+        return Operator(self.data / complex(other), self.space)
+
     def __matmul__(self, other: Operator) -> Operator:
         """Tensor product using the `@` operator."""
         return tensor(self, other)
@@ -128,6 +132,27 @@ def destroy(space_or_dim: HilbertSpace | int) -> Operator:
 def create(space_or_dim: HilbertSpace | int) -> Operator:
     """Bosonic creation operator."""
     return destroy(space_or_dim).dag()
+
+
+def identity(space_or_dim: HilbertSpace | int) -> Operator:
+    """Identity operator (alias of :func:`eye`)."""
+    return eye(space_or_dim)
+
+
+def position(space_or_dim: HilbertSpace | int) -> Operator:
+    """Dimensionless position quadrature ``(a + a^dagger) / sqrt(2)``."""
+    dim = _dimension(space_or_dim)
+    a = destroy(dim)
+    data = (a.to_numpy() + a.dag().to_numpy()) / np.sqrt(2.0)
+    return Operator(data.astype(np.complex128), _operator_space(space_or_dim), "x")
+
+
+def momentum(space_or_dim: HilbertSpace | int) -> Operator:
+    """Dimensionless momentum quadrature ``-i (a - a^dagger) / sqrt(2)``."""
+    dim = _dimension(space_or_dim)
+    a = destroy(dim)
+    data = -1j * (a.to_numpy() - a.dag().to_numpy()) / np.sqrt(2.0)
+    return Operator(data.astype(np.complex128), _operator_space(space_or_dim), "p")
 
 
 def num(space_or_dim: HilbertSpace | int) -> Operator:
@@ -340,6 +365,11 @@ def coherent(space_or_dim: FockSpace | int, alpha: complex) -> Array:
     values *= np.exp(-0.5 * abs(alpha) ** 2)
     norm = np.linalg.norm(values)
     return values / norm if norm > 0 else values
+
+
+def coherent_dm(space_or_dim: FockSpace | int, alpha: complex) -> Array:
+    """Density matrix of a truncated coherent state."""
+    return ket2dm(coherent(space_or_dim, alpha))
 
 
 def thermal_dm(space_or_dim: FockSpace | int, nbar: float) -> Array:

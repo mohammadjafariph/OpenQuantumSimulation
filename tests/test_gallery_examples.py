@@ -25,6 +25,7 @@ def test_backend_gallery_examples_run_in_fast_mode(tmp_path: Path) -> None:
     import openquantumsim as oqs
     from examples.gallery import (
         driven_qubit,
+        entanglement_spectra,
         jaynes_cummings,
         parameter_sweep,
         quantum_trajectory,
@@ -38,6 +39,7 @@ def test_backend_gallery_examples_run_in_fast_mode(tmp_path: Path) -> None:
     modules = [
         qubit_decay,
         driven_qubit,
+        entanglement_spectra,
         jaynes_cummings,
         quantum_trajectory,
         parameter_sweep,

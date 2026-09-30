@@ -75,6 +75,10 @@ oqs setup-julia
 - Steady-state solves, two-time correlations, and parameter sweeps.
 - State metrics including purity, entropy, fidelity, trace distance,
   populations, coherences, and Bloch-vector components.
+- Entanglement diagnostics: negativity, logarithmic negativity, and
+  two-qubit concurrence, plus mutual information on arbitrary cuts.
+- Correlation-function spectra via FFT and propagators (unitary or
+  Lindblad superoperators) for time-independent systems.
 - Wigner and Husimi-Q phase-space distributions for finite Fock spaces.
 - HDF5 result persistence for solver outputs and sweep summaries.
 - Validation scripts comparing analytic limits and QuTiP reference models.
@@ -115,7 +119,8 @@ print(result.expect[0].real)
 
 More complete scripts are available under `examples/gallery/`, including
 deterministic decay, a time-dependent driven qubit, Jaynes-Cummings dynamics,
-Monte Carlo trajectories, phase-space plots, and restartable parameter sweeps.
+Monte Carlo trajectories, phase-space plots, restartable parameter sweeps, and
+coupled-qubit entanglement dynamics with emission spectra.
 Each one supports a quick smoke run:
 
 ```bash

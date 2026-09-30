@@ -5,7 +5,7 @@ All notable changes to OpenQuantumSim will be documented here.
 The project follows semantic versioning once the public API reaches `0.1.0`.
 Until then, entries are grouped under alpha releases.
 
-## Unreleased
+## 0.1.0a6 - 2026-09-30
 
 - Added `brmesolve`, a secular Bloch-Redfield master-equation solver backed
   by the Julia runtime, with `a_ops` coupling operators and user-supplied
@@ -28,6 +28,16 @@ Until then, entries are grouped under alpha releases.
   operator returned a plain NumPy array instead of an `Operator`.
 - Fixed Windows path handling in the Julia bridge and `oqs` CLI: backend and
   sysimage paths are normalized to posix form before reaching Julia.
+- Added a coupled-qubit entanglement and emission-spectrum gallery example.
+- Added `benchmarks/bench_sparse_scaling.py`, a sparse Hilbert-space scaling
+  benchmark (spin chains at Hilbert dimensions ~512-2048) against QuTiP when
+  it is installed.
+- Added macOS to the CI matrix for Python lint/tests and Python-Julia physics
+  tests, so the tested platforms match the benchmarked platforms.
+- Fixed CI typing against numpy stubs and switched CI to the
+  juliapkg-managed Julia executable.
+- Documented the authorship policy in the README and polished the Sphinx
+  documentation set.
 
 ## 0.1.0a5 - 2026-05-27
 

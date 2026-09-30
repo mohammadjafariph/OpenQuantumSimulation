@@ -25,7 +25,9 @@ diagnostics without leaving the Python scientific stack.
 Get started with the :doc:`quickstart`, browse the :doc:`examples`, or jump
 straight to the :doc:`api/index`. The package is currently an **alpha**: the
 API is usable, tested, and published on PyPI, but minor interface changes may
-still occur before a stable ``0.1`` release.
+still occur before a stable ``0.1`` release. The solver entry points, the
+``Result`` object, and the HDF5 result schema are stable-in-practice; see the
+README for the road to ``0.1.0``.
 
 If you use OpenQuantumSim in your research, please cite the software release —
 see the repository ``CITATION.cff``.
@@ -49,6 +51,7 @@ see the repository ``CITATION.cff``.
    :maxdepth: 2
    :caption: Background
 
-   theory/index
-   validation
-   performance
+   theory/index
+   validation
+   performance
+   case_studies

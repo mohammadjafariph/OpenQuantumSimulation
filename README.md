@@ -49,6 +49,20 @@ The package is currently released as an alpha. The API is usable, tested, and
 published on PyPI, but minor interface changes may still occur before a stable
 `0.1` release.
 
+## Stability and the Road to 0.1.0
+
+The core solver entry points (`mesolve`, `mcsolve`, `brmesolve`,
+`single_trajectory`, `steadystate`, `propagator`), the `Result` object, and the
+HDF5 result schema are stable-in-practice: the validation suite and CI guard
+them, and no breaking change will land in a patch-level alpha release. Before
+the stable `0.1.0` tag, any breaking change to a documented public function
+will be announced with a deprecation warning and a changelog entry in the
+preceding release.
+
+The remaining pre-`0.1.0` work (API review items and the stability date) is
+tracked in the repository roadmap issue:
+https://github.com/mohammadjafariph/OpenQuantumSimulation/issues
+
 ## Installation
 
 ```bash

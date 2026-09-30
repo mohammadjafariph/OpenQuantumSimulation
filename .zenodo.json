@@ -1,0 +1,34 @@
+{
+  "title": "OpenQuantumSim",
+  "upload_type": "software",
+  "description": "OpenQuantumSim is a Python interface with a Julia backend for open quantum system simulation: Lindblad master-equation propagation, Monte Carlo wave-function trajectories, secular Bloch-Redfield dynamics, propagators, steady states, two-time correlations, parameter sweeps, HDF5 result persistence, and state diagnostics.",
+  "creators": [
+    {
+      "name": "Jafari, Mohammad",
+      "affiliation": "OpenQuantumSim"
+    }
+  ],
+  "access_right": "open",
+  "license": "mit",
+  "keywords": [
+    "open quantum systems",
+    "Lindblad equation",
+    "Monte Carlo wave function",
+    "quantum trajectories",
+    "Bloch-Redfield",
+    "Julia",
+    "Python"
+  ],
+  "related_identifiers": [
+    {
+      "scheme": "url",
+      "identifier": "https://github.com/mohammadjafariph/OpenQuantumSimulation",
+      "relation": "isSupplementTo"
+    },
+    {
+      "scheme": "url",
+      "identifier": "https://pypi.org/project/openquantumsim/",
+      "relation": "isSupplementTo"
+    }
+  ]
+}

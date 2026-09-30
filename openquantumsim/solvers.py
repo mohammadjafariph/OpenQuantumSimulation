@@ -10,6 +10,7 @@ from typing import Any, cast
 import numpy as np
 from numpy.typing import NDArray
 from scipy import sparse as sp  # type: ignore[import-untyped]
+from scipy.linalg import expm as _dense_expm  # type: ignore[import-untyped]
 
 from ._julia_bridge import JuliaBridgeUnavailable, load_backend
 from .observables import (
@@ -359,6 +360,87 @@ def steadystate(
         krylov_dim=int(opts.krylov_dim),
     )
     return np.asarray(raw, dtype=np.complex128)
+
+
+def lindblad_superoperator(
+    H: Operator,
+    c_ops: Sequence[Operator] | None = None,
+) -> Array:
+    """Return the dense Lindblad superoperator matrix in column-stacked form.
+
+    The returned matrix ``L`` acts on ``vec(rho)`` (column-stacked, matching
+    NumPy's Fortran-order reshape) as ``vec(L(rho)) = L @ vec(rho)``.
+    """
+    h_dim = H.dim
+    h_dense = np.asarray(H.to_numpy(), dtype=np.complex128)
+    identity = np.eye(h_dim, dtype=np.complex128)
+    generator = -1j * (np.kron(identity, h_dense) - np.kron(h_dense.T, identity))
+    for c_op in c_ops or []:
+        c_dense = np.asarray(c_op.to_numpy(), dtype=np.complex128)
+        cdc = c_dense.conj().T @ c_dense
+        generator += np.kron(c_dense.conj(), c_dense)
+        generator -= 0.5 * (np.kron(identity, cdc) + np.kron(cdc.T, identity))
+    return generator
+
+
+def apply_superoperator(superoperator: Array, rho: Array) -> Array:
+    """Apply a column-stacked superoperator to a density matrix."""
+    matrix = np.asarray(superoperator, dtype=np.complex128)
+    state = np.asarray(rho, dtype=np.complex128)
+    if state.ndim == 1:
+        state = np.asarray(np.outer(state, state.conj()), dtype=np.complex128)
+    if state.ndim != 2 or state.shape[0] != state.shape[1]:
+        msg = "rho must be a square density matrix."
+        raise ValueError(msg)
+    dim = state.shape[0]
+    if matrix.shape != (dim * dim, dim * dim):
+        msg = "superoperator dimension does not match rho."
+        raise ValueError(msg)
+    out = matrix @ state.reshape(-1, order="F")
+    return np.asarray(out.reshape((dim, dim), order="F"), dtype=np.complex128)
+
+
+def propagator(
+    H: Operator,
+    tlist: Sequence[float],
+    *,
+    c_ops: Sequence[Operator] | None = None,
+) -> list[Operator]:
+    """Propagators for a time-independent system at each time in ``tlist``.
+
+    Without collapse operators this returns the unitary propagators
+    ``U(t) = exp(-i H t)``. With collapse operators it returns the
+    propagator superoperators ``S(t) = exp(L t)`` built from the Lindblad
+    generator (see :func:`lindblad_superoperator`); apply them to a density
+    matrix with :func:`apply_superoperator`.
+    """
+    times = np.asarray(tlist, dtype=np.float64)
+    if times.ndim != 1 or times.size == 0:
+        msg = "tlist must be a non-empty 1-D sequence."
+        raise ValueError(msg)
+    if np.any(np.diff(times) < 0):
+        msg = "tlist must be increasing."
+        raise ValueError(msg)
+
+    h_dense = np.asarray(H.to_numpy(), dtype=np.complex128)
+    if c_ops:
+        generator = lindblad_superoperator(H, c_ops)
+        return [
+            Operator(
+                _dense_expm(generator * float(time)),
+                H.space,
+                f"S({time})",
+            )
+            for time in times
+        ]
+    return [
+        Operator(
+            _dense_expm(-1j * h_dense * float(time)),
+            H.space,
+            f"U({time})",
+        )
+        for time in times
+    ]
 
 
 def _validate_mesolve_inputs(

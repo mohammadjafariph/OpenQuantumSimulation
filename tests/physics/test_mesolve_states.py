@@ -102,3 +102,36 @@ def test_mesolve_hamiltonian_rabi_oscillation_matches_analytic_population() -> N
     assert np.max(np.abs(result.expect[0].imag)) < 1e-12
     assert result.states is not None
     _assert_density_matrices_are_physical(result.states)
+
+@pytest.mark.physics
+def test_propagator_superoperator_matches_mesolve() -> None:
+    import openquantumsim as oqs
+    from openquantumsim._julia_bridge import backend_available
+
+    if not backend_available():
+        pytest.skip("Julia backend is not available.")
+
+    gamma = 0.3
+    qubit = oqs.SpinSpace(0.5, label="q")
+    H = 0.0 * oqs.sigmaz(qubit)
+    collapse = np.sqrt(gamma) * oqs.sigmam(qubit)
+    times = [0.0, 0.4, 1.2]
+    rho0 = oqs.ket2dm(oqs.basis(qubit, "up"))
+
+    result = oqs.mesolve(
+        H,
+        rho0,
+        times,
+        c_ops=[collapse],
+        e_ops=[oqs.sigmaz(qubit)],
+        options=oqs.Options(rtol=1e-9, atol=1e-11, save_states=True),
+    )
+
+    current = rho0
+    previous_time = 0.0
+    for time in times:
+        step = oqs.propagator(H, [time - previous_time], c_ops=[collapse])[0]
+        current = oqs.apply_superoperator(step.to_numpy(), current)
+        previous_time = time
+        state = result.states[times.index(time)]
+        assert oqs.fidelity(current, state) == pytest.approx(1.0, abs=1e-6)

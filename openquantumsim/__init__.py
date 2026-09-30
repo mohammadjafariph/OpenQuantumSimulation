@@ -98,7 +98,15 @@ from .plot import (
     plot_wigner,
 )
 from .result import Options, QuantumSystem, Result, load_result
-from .solvers import mcsolve, mesolve, single_trajectory, steadystate
+from .solvers import (
+    apply_superoperator,
+    lindblad_superoperator,
+    mcsolve,
+    mesolve,
+    propagator,
+    single_trajectory,
+    steadystate,
+)
 from .sweep import ParameterSweep, SweepPoint, SweepRunResult
 from .systems import JaynesCummingsSystem, MCWFSystem, jaynes_cummings_system
 from .timedep import (
@@ -119,6 +127,7 @@ __all__ = [
     "JaynesCummingsSystem",
     "MCWFSystem",
     "Operator",
+    "apply_superoperator",
     "Options",
     "ParameterSweep",
     "QuantumSystem",
@@ -167,6 +176,7 @@ __all__ = [
     "is_hermitian",
     "ket2dm",
     "jaynes_cummings_system",
+    "lindblad_superoperator",
     "l1_coherence",
     "l1_coherence_observable",
     "logarithmic_negativity",
@@ -187,6 +197,7 @@ __all__ = [
     "participation_ratio_observable",
     "phase_space_grid",
     "plot_density_matrix",
+    "propagator",
     "plot_expectations",
     "plot_phase_space",
     "plot_q_function",

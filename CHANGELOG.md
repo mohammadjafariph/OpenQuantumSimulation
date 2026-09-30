@@ -14,6 +14,9 @@ Until then, entries are grouped under alpha releases.
   `openquantumsim.correlations` for frequency-domain spectra of sampled
   correlation functions via FFT.
 - Added `position`, `momentum`, `identity`, and `coherent_dm` operators.
+- Added `propagator` for time-independent unitary and Lindblad propagator
+  superoperators, plus `lindblad_superoperator` and `apply_superoperator`
+  for working with column-stacked superoperator matrices.
 - `Operator` now supports scalar division (`op / x`); previously dividing an
   operator returned a plain NumPy array instead of an `Operator`.
 - Fixed Windows path handling in the Julia bridge and `oqs` CLI: backend and

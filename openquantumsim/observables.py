@@ -664,7 +664,7 @@ def _density_eigenvalues(state: Array, *, normalize: bool) -> NDArray[np.float64
         total = evals.sum()
         if total > 0:
             evals = evals / total
-    return evals
+    return np.asarray(evals, dtype=np.float64)
 
 
 def _root_fidelity(state_a: Array, state_b: Array) -> float:
@@ -703,7 +703,8 @@ def _root_fidelity(state_a: Array, state_b: Array) -> float:
 def _sqrt_psd(matrix: Array) -> Array:
     evals, vectors = np.linalg.eigh(_hermitian_part(matrix))
     evals = np.maximum(evals.real, 0.0)
-    return (vectors * np.sqrt(evals)) @ vectors.conj().T
+    product = (vectors * np.sqrt(evals)) @ vectors.conj().T
+    return np.asarray(product, dtype=np.complex128)
 
 
 def _hermitian_part(matrix: Array) -> Array:

@@ -50,7 +50,8 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
     env:
-      PYTHON_JULIAPKG_EXE: julia
+      # juliapkg locates or downloads its own Julia; pointing it at the
+      # system executable broke with juliapkg 0.1.27 on GitHub runners.
       PYTHON_JULIACALL_HANDLE_SIGNALS: yes
 
     steps:

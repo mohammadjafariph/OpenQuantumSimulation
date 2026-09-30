@@ -139,7 +139,10 @@ def spectrum_correlation_fft(
     wlist = 2.0 * np.pi * np.fft.fftfreq(n, d=dt)
     spectrum = dt * n * np.fft.ifft(corr)
     order = np.argsort(wlist)
-    return wlist[order], spectrum[order]
+    return (
+        np.asarray(wlist[order], dtype=np.float64),
+        np.asarray(spectrum[order], dtype=np.complex128),
+    )
 
 
 def spectrum_2op_1t(

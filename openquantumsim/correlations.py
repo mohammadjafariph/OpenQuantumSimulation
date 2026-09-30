@@ -105,6 +105,71 @@ def correlation_2op_2t(
     return np.asarray(_field(raw, "correlations"), dtype=np.complex128)
 
 
+def spectrum_correlation_fft(
+    taulist: Sequence[float],
+    correlation: Array,
+) -> tuple[FloatArray, Array]:
+    """Return the frequency-domain spectrum of a sampled correlation function.
+
+    Given ``C(tau)`` sampled on a uniform grid, computes the discrete
+    approximation of ``S(w) = integral C(tau) exp(i w tau) dtau`` with
+    ``w = 2 * pi * f``. Returns ``(wlist, spectrum)`` sorted by ascending
+    frequency, in the same order.
+
+    For ``correlation_2op_1t`` output, ``|S(w)|`` peaks at the resonance
+    frequencies of the system, mirroring QuTiP's ``spectrum`` helper.
+    """
+    taus = np.asarray(taulist, dtype=np.float64)
+    corr = np.asarray(correlation, dtype=np.complex128)
+    if corr.ndim != 1 or corr.shape[0] != taus.shape[0]:
+        msg = "correlation must be a 1-D array matching taulist."
+        raise ValueError(msg)
+    if taus.shape[0] < 2:
+        msg = "taulist must contain at least two samples."
+        raise ValueError(msg)
+    dt = float(taus[1] - taus[0])
+    if dt <= 0:
+        msg = "taulist must be increasing with positive spacing."
+        raise ValueError(msg)
+    if not np.allclose(np.diff(taus), dt, rtol=1e-8, atol=1e-12):
+        msg = "taulist must be uniformly spaced."
+        raise ValueError(msg)
+
+    n = taus.shape[0]
+    wlist = 2.0 * np.pi * np.fft.fftfreq(n, d=dt)
+    spectrum = dt * n * np.fft.ifft(corr)
+    order = np.argsort(wlist)
+    return wlist[order], spectrum[order]
+
+
+def spectrum_2op_1t(
+    H: Operator,
+    rho0: Array,
+    taulist: Sequence[float],
+    a_op: Operator,
+    b_op: Operator,
+    *,
+    c_ops: Sequence[Operator] | None = None,
+    options: Options | None = None,
+) -> tuple[FloatArray, Array]:
+    """Return ``(wlist, spectrum)`` for ``<A(tau) B(0)>`` via FFT.
+
+    Runs ``correlation_2op_1t`` (quantum regression, requires the Julia
+    backend) and transforms the result with ``spectrum_correlation_fft``.
+    ``taulist`` must be uniformly spaced.
+    """
+    corr = correlation_2op_1t(
+        H,
+        rho0,
+        taulist,
+        a_op,
+        b_op,
+        c_ops=c_ops,
+        options=options,
+    )
+    return spectrum_correlation_fft(taulist, corr)
+
+
 def _validate_correlation_inputs(
     H: Operator,
     rho0: Array,

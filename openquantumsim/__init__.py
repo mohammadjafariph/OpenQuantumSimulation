@@ -1,7 +1,12 @@
 """OpenQuantumSim public Python API."""
 
 from ._version import __version__
-from .correlations import correlation_2op_1t, correlation_2op_2t
+from .correlations import (
+    correlation_2op_1t,
+    correlation_2op_2t,
+    spectrum_2op_1t,
+    spectrum_correlation_fft,
+)
 from .hilbert import CompositeSpace, DickeSpace, FockSpace, HilbertSpace, SpinSpace
 from .observables import (
     StateObservable,
@@ -10,6 +15,7 @@ from .observables import (
     bloch_vector,
     bures_angle,
     bures_distance,
+    concurrence,
     entropy_observable,
     evaluate_state_observables,
     expect,
@@ -23,7 +29,10 @@ from .observables import (
     l1_coherence_observable,
     linear_entropy,
     linear_entropy_observable,
+    logarithmic_negativity,
     mutual_information,
+    negativity,
+    negativity_observable,
     normalize_state,
     partial_trace,
     partial_traces,
@@ -129,6 +138,7 @@ __all__ = [
     "collective_z",
     "correlation_2op_1t",
     "correlation_2op_2t",
+    "concurrence",
     "create",
     "destroy",
     "dicke_excitation",
@@ -153,12 +163,15 @@ __all__ = [
     "jaynes_cummings_system",
     "l1_coherence",
     "l1_coherence_observable",
+    "logarithmic_negativity",
     "linear_entropy",
     "linear_entropy_observable",
     "load_result",
     "mcsolve",
     "mesolve",
     "mutual_information",
+    "negativity",
+    "negativity_observable",
     "normalize_state",
     "num",
     "partial_trace",
@@ -187,6 +200,8 @@ __all__ = [
     "spin_jx",
     "spin_jz",
     "sigmax",
+    "spectrum_2op_1t",
+    "spectrum_correlation_fft",
     "sigmay",
     "sigmaz",
     "steadystate",

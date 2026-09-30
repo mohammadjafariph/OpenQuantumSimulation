@@ -118,3 +118,60 @@ def test_named_state_observable_helpers() -> None:
     assert values["pr"][0].real == pytest.approx(2.0)
     assert values["coh"][0].real == pytest.approx(0.0)
     assert values["p0"][0].real == pytest.approx(0.5)
+
+def test_negativity_and_logarithmic_negativity() -> None:
+    up = np.array([1.0, 0.0], dtype=np.complex128)
+    down = np.array([0.0, 1.0], dtype=np.complex128)
+    bell = np.sqrt(0.5) * np.kron(up, up) + np.sqrt(0.5) * np.kron(down, down)
+    product = np.kron(up, up)
+    nonmax = np.sqrt(0.3) * np.kron(up, up) + np.sqrt(0.7) * np.kron(down, down)
+    mixed = 0.25 * np.eye(4, dtype=np.complex128)
+
+    assert oqs.negativity(bell, (2, 2), 0, 1) == pytest.approx(0.5)
+    assert oqs.negativity(product, (2, 2), 0, 1) == pytest.approx(0.0)
+    assert oqs.negativity(mixed, (2, 2), 0, 1) == pytest.approx(0.0)
+    assert oqs.negativity(nonmax, (2, 2), 0, 1) == pytest.approx(
+        np.sqrt(0.3 * 0.7)
+    )
+    assert oqs.negativity(bell, (2, 2), 1, 0) == pytest.approx(0.5)
+    assert oqs.logarithmic_negativity(bell, (2, 2), 0, 1) == pytest.approx(1.0)
+    assert oqs.logarithmic_negativity(product, (2, 2), 0, 1) == pytest.approx(0.0)
+
+    # ket input on a qutrit-qubit system works without an explicit dm.
+    qutrit_ket = np.zeros(6, dtype=np.complex128)
+    qutrit_ket[0] = 1.0
+    assert oqs.negativity(qutrit_ket, (3, 2), 0, 1) == pytest.approx(0.0)
+
+    with pytest.raises(ValueError, match="disjoint"):
+        oqs.negativity(bell, (2, 2), 0, 0)
+
+
+def test_concurrence_two_qubit_states() -> None:
+    up = np.array([1.0, 0.0], dtype=np.complex128)
+    down = np.array([0.0, 1.0], dtype=np.complex128)
+    bell = np.sqrt(0.5) * np.kron(up, up) + np.sqrt(0.5) * np.kron(down, down)
+    product = np.kron(up, up)
+    nonmax = np.sqrt(0.3) * np.kron(up, up) + np.sqrt(0.7) * np.kron(down, down)
+    mixed = 0.25 * np.eye(4, dtype=np.complex128)
+
+    assert oqs.concurrence(bell) == pytest.approx(1.0)
+    assert oqs.concurrence(product) == pytest.approx(0.0)
+    assert oqs.concurrence(mixed) == pytest.approx(0.0)
+    assert oqs.concurrence(nonmax) == pytest.approx(2.0 * np.sqrt(0.3 * 0.7))
+
+    with pytest.raises(ValueError, match="dimension-4"):
+        oqs.concurrence(up)
+
+
+def test_negativity_observable_callback() -> None:
+    up = np.array([1.0, 0.0], dtype=np.complex128)
+    down = np.array([0.0, 1.0], dtype=np.complex128)
+    bell = np.sqrt(0.5) * np.kron(up, up) + np.sqrt(0.5) * np.kron(down, down)
+
+    observable = oqs.negativity_observable((2, 2), 0, 1)
+    assert set(observable) == {"negativity"}
+    value = observable["negativity"](bell)
+    assert complex(value).real == pytest.approx(0.5)
+
+    values = oqs.evaluate_state_observables([bell, bell], observable)
+    assert values["negativity"][0].real == pytest.approx(0.5)

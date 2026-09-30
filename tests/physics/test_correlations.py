@@ -83,3 +83,39 @@ def test_correlation_validates_inputs_before_backend_load() -> None:
             oqs.sigmap(atom),
             oqs.sigmam(atom),
         )
+
+@pytest.mark.physics
+def test_spectrum_2op_1t_qubit_decay_peaks_at_zero_frequency() -> None:
+    import openquantumsim as oqs
+    from openquantumsim._julia_bridge import backend_available
+
+    if not backend_available():
+        pytest.skip("Julia backend is not available.")
+
+    gamma = 0.4
+    atom = oqs.SpinSpace(0.5, label="atom")
+    H = 0.0 * oqs.sigmaz(atom)
+    excited = oqs.basis(atom, "up")
+    rho0 = oqs.ket2dm(excited)
+    collapse = np.sqrt(gamma) * oqs.sigmam(atom)
+    taus = np.linspace(0.0, 20.0, 201)
+
+    wlist, spectrum = oqs.spectrum_2op_1t(
+        H,
+        rho0,
+        taus,
+        oqs.sigmap(atom),
+        oqs.sigmam(atom),
+        c_ops=[collapse],
+        options=oqs.Options(rtol=1e-9, atol=1e-11),
+    )
+
+    assert wlist.shape == taus.shape
+    assert np.all(np.diff(wlist) > 0)
+    peak = wlist[np.argmax(np.abs(spectrum))]
+    resolution = 2.0 * np.pi / (taus[-1] - taus[0])
+    assert peak == pytest.approx(0.0, abs=resolution)
+
+    # Lorentzian shape from the analytic correlation exp(-gamma*tau/2).
+    analytic = 1.0 / (0.5 * gamma - 1j * wlist)
+    assert np.allclose(spectrum, analytic, rtol=5e-2, atol=5e-2)

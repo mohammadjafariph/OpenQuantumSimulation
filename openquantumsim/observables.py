@@ -488,6 +488,112 @@ def partial_traces(state: Array, dim_a: int, dim_b: int) -> tuple[Array, Array]:
     )
 
 
+def _partial_transpose_matrix(
+    state: Array,
+    dims: Sequence[int],
+    subsystem_a: int | Sequence[int],
+    subsystem_b: int | Sequence[int],
+) -> Array:
+    """Return the partial transpose over ``subsystem_b`` of the AB block."""
+    dims_tuple = _validate_dims(dims)
+    keep_a = _normalize_keep(subsystem_a, len(dims_tuple))
+    keep_b = _normalize_keep(subsystem_b, len(dims_tuple))
+    if set(keep_a) & set(keep_b):
+        msg = "subsystem_a and subsystem_b must be disjoint."
+        raise ValueError(msg)
+
+    keep_ab = tuple(sorted((*keep_a, *keep_b)))
+    rho_ab = partial_trace(state, dims_tuple, keep_ab)
+    dims_ab = tuple(dims_tuple[idx] for idx in keep_ab)
+    n_kept = len(keep_ab)
+    matrix = rho_ab.reshape((*dims_ab, *dims_ab))
+    axes = list(range(2 * n_kept))
+    b_positions = {
+        pos for pos, idx in enumerate(keep_ab) if idx in set(keep_b)
+    }
+    for pos in b_positions:
+        axes[pos], axes[n_kept + pos] = axes[n_kept + pos], axes[pos]
+    return cast(Array, matrix.transpose(axes).reshape(rho_ab.shape))
+
+
+def negativity(
+    state: Array,
+    dims: Sequence[int],
+    subsystem_a: int | Sequence[int],
+    subsystem_b: int | Sequence[int],
+) -> float:
+    """Vidal-Werner negativity ``(||rho^T_B||_1 - 1) / 2`` for the AB block.
+
+    Accepts a ket or density matrix; ``dims`` describes the full tensor
+    product. For separable states the value is zero, and for a maximally
+    entangled two-qubit state it is 0.5.
+    """
+    transposed = _partial_transpose_matrix(state, dims, subsystem_a, subsystem_b)
+    l1_norm = float(np.sum(np.abs(np.linalg.eigvalsh(transposed))))
+    return max(0.0, (l1_norm - 1.0) / 2.0)
+
+
+def logarithmic_negativity(
+    state: Array,
+    dims: Sequence[int],
+    subsystem_a: int | Sequence[int],
+    subsystem_b: int | Sequence[int],
+) -> float:
+    """Logarithmic negativity ``log2(||rho^T_B||_1)`` for the AB block.
+
+    Measured in bits; a maximally entangled two-qubit state gives 1.0.
+    """
+    transposed = _partial_transpose_matrix(state, dims, subsystem_a, subsystem_b)
+    l1_norm = float(np.sum(np.abs(np.linalg.eigvalsh(transposed))))
+    return float(np.log2(max(l1_norm, 1.0)))
+
+
+def concurrence(state: Array) -> float:
+    """Wootters concurrence for a two-qubit ket or density matrix.
+
+    The state must be a dimension-4 ket or 4x4 density matrix in the
+    computational basis ``|00>, |01>, |10>, |11>``. Returns zero for
+    separable states and one for maximally entangled states.
+    """
+    matrix = _density_matrix(state)
+    if matrix.shape != (4, 4):
+        msg = "concurrence requires a two-qubit (dimension-4) state."
+        raise ValueError(msg)
+    tilde = np.array(
+        [
+            [0.0, 0.0, 0.0, -1.0],
+            [0.0, 0.0, 1.0, 0.0],
+            [0.0, 1.0, 0.0, 0.0],
+            [-1.0, 0.0, 0.0, 0.0],
+        ],
+        dtype=np.complex128,
+    )
+    product = matrix @ tilde @ matrix.conj() @ tilde
+    eigenvalues = np.sort(np.linalg.eigvals(product).real)[::-1]
+    values = np.sqrt(np.maximum(eigenvalues, 0.0))
+    return float(max(0.0, values[0] - values[1] - values[2] - values[3]))
+
+
+def negativity_observable(
+    dims: Sequence[int],
+    subsystem_a: int | Sequence[int],
+    subsystem_b: int | Sequence[int],
+    *,
+    name: str = "negativity",
+) -> dict[str, StateObservable]:
+    """Return a named negativity callback mapping for solver runs."""
+    dims_tuple = tuple(dims)
+    keep_a = tuple(subsystem_a) if isinstance(subsystem_a, Sequence) else (subsystem_a,)
+    keep_b = tuple(subsystem_b) if isinstance(subsystem_b, Sequence) else (subsystem_b,)
+    return {
+        name: _scalar_metric(
+            lambda state: negativity(state, dims_tuple, keep_a, keep_b),
+            spec={"kind": "negativity", "dims": list(dims_tuple),
+                  "subsystem_a": list(keep_a), "subsystem_b": list(keep_b)},
+        ),
+    }
+
+
 def _scalar_metric(
     callback: Callable[[Array], object],
     *,

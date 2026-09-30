@@ -116,6 +116,18 @@ def test_spectrum_2op_1t_qubit_decay_peaks_at_zero_frequency() -> None:
     resolution = 2.0 * np.pi / (taus[-1] - taus[0])
     assert peak == pytest.approx(0.0, abs=resolution)
 
-    # Lorentzian shape from the analytic correlation exp(-gamma*tau/2).
-    analytic = 1.0 / (0.5 * gamma - 1j * wlist)
-    assert np.allclose(spectrum, analytic, rtol=5e-2, atol=5e-2)
+    # The FFT estimator returns the discrete-time spectrum of the sampled
+    # correlation exp(-gamma*tau/2): dt / (1 - exp((i w - gamma/2) dt)).
+    # Compare inside the band, away from the Nyquist edge where the
+    # discrete transform aliases the DC component.
+    dt = taus[1] - taus[0]
+    in_band = np.abs(wlist) < 0.25 * np.pi / dt
+    assert np.count_nonzero(in_band) > 5
+    ratio = np.exp((1j * wlist - 0.5 * gamma) * dt)
+    exact_dtft = dt / (1.0 - ratio)
+    assert np.allclose(
+        spectrum[in_band],
+        exact_dtft[in_band],
+        rtol=3e-2,
+        atol=3e-2,
+    )

@@ -352,6 +352,14 @@ scripts/                    Development and validation helpers
 examples/                   Domain examples built on the public API
 ```
 
+## Authorship
+
+The research idea, overall architecture and design, and the original seed
+Julia codes and scripts are the author's own work. Language models (LLMs)
+assisted with later improvements, optimizations, and porting; the author
+reviewed, tested, and validated the resulting code. The validation suite,
+benchmarks, and CI on Linux and Windows back this process.
+
 ## Citation
 
 If you use OpenQuantumSim in your research, please cite the software release

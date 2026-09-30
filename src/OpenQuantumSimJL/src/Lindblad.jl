@@ -81,6 +81,40 @@ function mesolve(
     requested_method = lowercase(String(method))
     method_name = requested_method == "auto" ? "ode" : requested_method
 
+    sol_u, retcode, elapsed = _solve_liouvillian(
+        L,
+        u0,
+        times;
+        rtol = Float64(rtol),
+        atol = Float64(atol),
+        method_name = method_name,
+        krylov_dim = Int(krylov_dim),
+    )
+
+    return _collect_solution(
+        sol_u,
+        times,
+        d,
+        expectation_ops;
+        save_states = save_states,
+        compute_entropy = compute_entropy,
+        elapsed = elapsed,
+        retcode = retcode,
+        method_name = method_name,
+        requested_method = requested_method,
+        krylov_dim = Int(krylov_dim),
+    )
+end
+
+function _solve_liouvillian(
+    L,
+    u0::Vector{ComplexF64},
+    times::Vector{Float64};
+    rtol::Real = 1e-8,
+    atol::Real = 1e-10,
+    method_name::AbstractString = "ode",
+    krylov_dim::Integer = 30,
+)
     elapsed = @elapsed begin
         if length(times) == 1
             sol_u = [u0]
@@ -112,10 +146,25 @@ function mesolve(
             sol_u = sol.u
             retcode = string(sol.retcode)
         else
-            throw(ArgumentError("unknown mesolve method: $(method)"))
+            throw(ArgumentError("unknown solver method: $(method_name)"))
         end
     end
+    return sol_u, retcode, elapsed
+end
 
+function _collect_solution(
+    sol_u,
+    times::Vector{Float64},
+    d::Integer,
+    expectation_ops::Vector{SparseMatrixCSC{ComplexF64, Int64}};
+    save_states::Bool = false,
+    compute_entropy::Bool = true,
+    elapsed::Real = 0.0,
+    retcode::AbstractString = "Success",
+    method_name::AbstractString = "ode",
+    requested_method::AbstractString = "auto",
+    krylov_dim::Integer = 30,
+)
     n_times = length(times)
     n_expect = length(expectation_ops)
     expect_values = zeros(ComplexF64, n_expect, n_times)

@@ -135,3 +135,75 @@ def test_propagator_superoperator_matches_mesolve() -> None:
         previous_time = time
         state = result.states[times.index(time)]
         assert oqs.fidelity(current, state) == pytest.approx(1.0, abs=1e-6)
+
+@pytest.mark.physics
+def test_brmesolve_zero_temperature_damping_matches_mesolve() -> None:
+    import openquantumsim as oqs
+    from openquantumsim._julia_bridge import backend_available
+
+    if not backend_available():
+        pytest.skip("Julia backend is not available.")
+
+    kappa = 0.4
+    qubit = oqs.SpinSpace(0.5, label="q")
+    H = 0.5 * oqs.sigmaz(qubit)
+    rho0 = oqs.ket2dm(oqs.basis(qubit, "up"))
+    times = [0.0, 0.5, 1.5]
+
+    def spectrum(omega: float) -> float:
+        # Decay channels sit at negative Bohr frequencies.
+        return kappa if omega < 0 else 0.0
+
+    br = oqs.brmesolve(
+        H,
+        rho0,
+        times,
+        a_ops=[(oqs.sigmam(qubit), spectrum)],
+        e_ops=[oqs.sigmaz(qubit)],
+        options=oqs.Options(rtol=1e-9, atol=1e-11, save_states=True),
+    )
+    lind = oqs.mesolve(
+        H,
+        rho0,
+        times,
+        c_ops=[np.sqrt(kappa) * oqs.sigmam(qubit)],
+        e_ops=[oqs.sigmaz(qubit)],
+        options=oqs.Options(rtol=1e-9, atol=1e-11, save_states=True),
+    )
+
+    np.testing.assert_allclose(br.expect[0].real, lind.expect[0].real, atol=1e-8)
+    for br_state, lind_state in zip(br.states, lind.states, strict=True):
+        assert oqs.fidelity(br_state, lind_state) == pytest.approx(1.0, abs=1e-8)
+
+
+@pytest.mark.physics
+def test_brmesolve_white_noise_dephasing_rate() -> None:
+    import openquantumsim as oqs
+    from openquantumsim._julia_bridge import backend_available
+
+    if not backend_available():
+        pytest.skip("Julia backend is not available.")
+
+    qubit = oqs.SpinSpace(0.5, label="q")
+    H = 0.5 * oqs.sigmaz(qubit)
+    rho_plus = oqs.ket2dm(
+        (oqs.basis(qubit, "up") + oqs.basis(qubit, "down")) / np.sqrt(2.0)
+    )
+    times = [0.0, 0.5, 1.5]
+
+    dep = oqs.brmesolve(
+        H,
+        rho_plus,
+        times,
+        a_ops=[(oqs.sigmaz(qubit), lambda omega: 0.3)],
+        options=oqs.Options(rtol=1e-9, atol=1e-11, save_states=True),
+    )
+
+    for time, state in zip(times, dep.states, strict=True):
+        # sigma_z dephasing damps coherences at rate 2 * gamma
+        assert complex(state[0, 1]).real == pytest.approx(
+            0.5 * np.cos(time) * np.exp(-0.6 * time), abs=1e-8
+        )
+        assert complex(state[0, 1]).imag == pytest.approx(
+            -0.5 * np.sin(time) * np.exp(-0.6 * time), abs=1e-8
+        )

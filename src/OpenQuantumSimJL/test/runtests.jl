@@ -495,3 +495,46 @@ end
     @test quiet.expect_std ≈ loud.expect_std
     @test quiet.expect_stderr ≈ loud.expect_stderr
 end
+
+@testset "Bloch-Redfield" begin
+    # Zero-temperature amplitude damping: decay channels sit at negative
+    # Bohr frequencies, so a one-sided spectrum must reproduce the Lindblad
+    # solution exactly for a qubit.
+    H = ComplexF64[0.5 0; 0 -0.5]
+    rho0 = ComplexF64[1 0; 0 0]
+    times = [0.0, 0.5, 1.5]
+    kappa = 0.4
+    lowering = ComplexF64[0 1; 0 0]
+    spectrum(omega) = omega < 0 ? kappa : 0.0
+    sm = ComplexF64[0 1; 0 0]
+
+    br = brmesolve(H, rho0, times, [lowering], [spectrum], ComplexF64[], 1e-8, 1e-10, false, "ode", 30, false)
+    lind = mesolve(H, rho0, times, [sqrt(kappa) * sm], ComplexF64[], 1e-8, 1e-10, false, "ode", 30, false)
+    @test br.expect ≈ lind.expect atol = 1e-10
+
+    # Constant white spectrum on sigma_z is pure dephasing; coherences decay
+    # at rate 2*gamma, populations stay fixed.
+    sz = ComplexF64[1 0; 0 -1]
+    white(omega) = 0.3
+    rho_plus = 0.5 * ComplexF64[1 1; 1 1]
+    dep = brmesolve(H, rho_plus, times, [sz], [white], ComplexF64[], 1e-8, 1e-10, true, "ode", 30, false)
+    for idx in 1:length(times)
+        rho = dep.states[:, :, idx]
+        @test real(rho[1, 1]) ≈ 0.5 atol = 1e-10
+        # coherence magnitude decays at rate 2*gamma; the phase precesses
+        @test abs(rho[1, 2]) ≈ 0.5 * exp(-0.6 * times[idx]) atol = 1e-9
+    end
+
+    # The generator is trace preserving: L vec(I) = 0.
+    L = br_liouvillian(H, [lowering], [spectrum])
+    d = 2
+    identity_vec = vec(Matrix{ComplexF64}(I, d, d))
+    @test norm(L * identity_vec) ≈ 0.0 atol = 1e-12
+
+    # Non-Hermitian Hamiltonians are rejected.
+    @test_throws ArgumentError br_liouvillian(
+        ComplexF64[0 1; 0 0],
+        [lowering],
+        [spectrum],
+    )
+end

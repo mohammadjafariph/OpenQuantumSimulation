@@ -100,6 +100,7 @@ from .plot import (
 from .result import Options, QuantumSystem, Result, load_result
 from .solvers import (
     apply_superoperator,
+    brmesolve,
     lindblad_superoperator,
     mcsolve,
     mesolve,
@@ -140,6 +141,7 @@ __all__ = [
     "basis",
     "bipartite_mutual_information",
     "bloch_vector",
+    "brmesolve",
     "bloch_observables",
     "bures_angle",
     "bures_distance",

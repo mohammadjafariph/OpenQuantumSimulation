@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from numbers import Number
 from typing import Any, cast
@@ -398,6 +398,83 @@ def apply_superoperator(superoperator: Array, rho: Array) -> Array:
         raise ValueError(msg)
     out = matrix @ state.reshape(-1, order="F")
     return np.asarray(out.reshape((dim, dim), order="F"), dtype=np.complex128)
+
+
+def brmesolve(
+    H: Operator,
+    rho0: Array,
+    tlist: Sequence[float],
+    *,
+    a_ops: Sequence[tuple[Operator, Callable[[float], float]]],
+    e_ops: Sequence[Operator] | None = None,
+    options: Options | None = None,
+) -> Result:
+    """Solve the secular Bloch-Redfield master equation.
+
+    ``a_ops`` pairs each bath-coupling operator with a spectrum callable
+    ``gamma(omega)`` giving the dissipator weight at Bohr frequency
+    ``omega``. A constant weight ``g`` is equivalent to a Lindblad collapse
+    operator ``sqrt(g) * A``; a zero-temperature bath returns ``g`` for
+    ``omega > 0`` and ``0`` for ``omega < 0``.
+
+    Transitions sharing a Bohr frequency are treated as a single secular
+    channel. The Hamiltonian must be Hermitian.
+    """
+    opts = options or Options()
+    times = np.asarray(tlist, dtype=np.float64)
+    rho0_array = np.asarray(rho0, dtype=np.complex128)
+    a_pairs = [(op, spectrum) for op, spectrum in a_ops]
+    a_arrays = [op.to_numpy() for op, _ in a_pairs]
+    spectra = [spectrum for _, spectrum in a_pairs]
+    e_arrays = [op.to_numpy() for op in e_ops or []]
+
+    _validate_mesolve_inputs(H, rho0_array, times, a_arrays, e_arrays)
+
+    try:
+        backend = load_backend()
+    except JuliaBridgeUnavailable as exc:
+        msg = "brmesolve requires the Julia backend; run `oqs setup-julia` first."
+        raise NotImplementedError(msg) from exc
+
+    raw = backend.brmesolve(
+        _matrix_payload(backend, H.data),
+        rho0_array,
+        times,
+        [_matrix_payload(backend, array) for array in a_arrays],
+        list(spectra),
+        [_matrix_payload(backend, array) for array in e_arrays],
+        float(opts.rtol),
+        float(opts.atol),
+        bool(opts.save_states),
+        str(opts.method),
+        int(opts.krylov_dim),
+        bool(opts.compute_entropy),
+    )
+
+    raw_times = np.asarray(_field(raw, "times"), dtype=np.float64)
+    raw_expect = np.asarray(_field(raw, "expect"), dtype=np.complex128)
+    raw_entropy = (
+        np.asarray(_field(raw, "entropy"), dtype=np.float64)
+        if opts.compute_entropy
+        else None
+    )
+    raw_states = np.asarray(_field(raw, "states"), dtype=np.complex128)
+    stats = _to_python_dict(_field(raw, "solver_stats"))
+    needs_states = bool(opts.save_states)
+
+    expects = [raw_expect[idx, :].copy() for idx in range(raw_expect.shape[0])]
+    state_series = _density_states(raw_states, len(raw_times)) if needs_states else []
+
+    return Result(
+        times=raw_times,
+        states=state_series if needs_states else None,
+        expect=expects,
+        expect_std=[],
+        expect_stderr=[],
+        state_observables={},
+        entropy=raw_entropy,
+        solver_stats=stats,
+    )
 
 
 def propagator(

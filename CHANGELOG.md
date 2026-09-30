@@ -7,6 +7,13 @@ Until then, entries are grouped under alpha releases.
 
 ## Unreleased
 
+- Added `brmesolve`, a secular Bloch-Redfield master-equation solver backed
+  by the Julia runtime, with `a_ops` coupling operators and user-supplied
+  spectrum callables; transitions sharing a Bohr frequency are grouped into
+  single secular channels.
+- Added a Bloch-Redfield testset to the Julia backend suite and physics
+  tests cross-validating zero-temperature damping against `mesolve`.
+
 - Added entanglement measures to `openquantumsim.observables`: `negativity`,
   `logarithmic_negativity`, and `concurrence`, plus a `negativity_observable`
   callback builder for solver runs.

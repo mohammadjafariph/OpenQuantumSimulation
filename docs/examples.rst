@@ -64,6 +64,17 @@ example is pure Python and does not require loading the Julia backend.
    :language: python
    :caption: examples/gallery/phase_space.py
 
+Entanglement and Emission Spectra
+---------------------------------
+
+Simulates two exchange-coupled qubits with dephasing: negativity dynamics from
+``negativity_observable`` and the emission spectrum of one qubit via
+``spectrum_2op_1t``.
+
+.. literalinclude:: ../examples/gallery/entanglement_spectra.py
+   :language: python
+   :caption: examples/gallery/entanglement_spectra.py
+
 Parameter Sweep
 ---------------
 

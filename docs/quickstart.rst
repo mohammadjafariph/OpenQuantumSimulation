@@ -67,6 +67,40 @@ the excited-state population with the analytic result.
    assert np.allclose(result.expect[0].real, expected, atol=2e-7)
    print(result.expect[0].real)
 
+Beyond the Basics
+-----------------
+
+Weak system-bath coupling with the secular Bloch-Redfield equation, where each
+bath coupling pairs an operator with a spectrum callable:
+
+.. code-block:: python
+
+   kappa = 0.4
+   zero_temperature = lambda omega: kappa if omega < 0 else 0.0
+
+   br = oqs.brmesolve(
+       H,
+       rho0,
+       times,
+       a_ops=[(oqs.sigmam(atom), zero_temperature)],
+       e_ops=[projector],
+   )
+
+A constant spectrum ``gamma = g`` is equivalent to a Lindblad collapse operator
+``sqrt(g) * A``, which makes BR results easy to check against ``mesolve``.
+
+Entanglement and correlation diagnostics work on plain NumPy states, so they
+can be applied to any saved density matrix:
+
+.. code-block:: python
+
+   conc = oqs.concurrence(rho)                      # two-qubit states
+   neg = oqs.negativity(rho, (2, 2), 0, 1)          # any bipartite cut
+   taus = np.linspace(0.0, 10.0, 201)
+   wlist, spectrum = oqs.spectrum_2op_1t(
+       H, rho0, taus, oqs.sigmap(atom), oqs.sigmam(atom), c_ops=[collapse],
+   )
+
 Development Install
 -------------------
 

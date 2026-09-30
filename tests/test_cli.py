@@ -52,8 +52,9 @@ def test_packagecompiler_script_includes_backend_and_output(tmp_path: Path) -> N
     )
 
     assert 'Pkg.develop(Pkg.PackageSpec(path="/backend"))' in script
-    assert f'sysimage_path="{tmp_path / "sysimage.so"}"' in script
-    assert f'precompile_execution_file="{tmp_path / "precompile.jl"}' in script
+    assert f'sysimage_path="{(tmp_path / "sysimage.so").as_posix()}"' in script
+    precompile_path = (tmp_path / "precompile.jl").as_posix()
+    assert f'precompile_execution_file="{precompile_path}' in script
     assert 'cpu_target="generic"' in script
 
 

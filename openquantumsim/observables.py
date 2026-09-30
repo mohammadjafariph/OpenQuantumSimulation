@@ -173,7 +173,7 @@ def normalize_state(state: Array) -> Array:
         if norm <= 0:
             msg = "state vector has zero norm."
             raise ValueError(msg)
-        return cast(Array, array / norm)
+        return array / norm
     if array.ndim == 2 and array.shape[0] == array.shape[1]:
         return _normalize_density_matrix(array)
     msg = "state must be a ket vector or square density matrix."
@@ -558,7 +558,7 @@ def _density_eigenvalues(state: Array, *, normalize: bool) -> NDArray[np.float64
         total = evals.sum()
         if total > 0:
             evals = evals / total
-    return cast(NDArray[np.float64], evals)
+    return evals
 
 
 def _root_fidelity(state_a: Array, state_b: Array) -> float:
@@ -597,7 +597,7 @@ def _root_fidelity(state_a: Array, state_b: Array) -> float:
 def _sqrt_psd(matrix: Array) -> Array:
     evals, vectors = np.linalg.eigh(_hermitian_part(matrix))
     evals = np.maximum(evals.real, 0.0)
-    return cast(Array, (vectors * np.sqrt(evals)) @ vectors.conj().T)
+    return (vectors * np.sqrt(evals)) @ vectors.conj().T
 
 
 def _hermitian_part(matrix: Array) -> Array:

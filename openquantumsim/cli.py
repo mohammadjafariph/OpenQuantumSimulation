@@ -48,7 +48,7 @@ def setup_julia_command() -> int:
     """Instantiate and precompile the packaged Julia backend."""
     backend = backend_path()
     load_backend(instantiate=True)
-    print(f"Julia backend ready: {backend}")
+    print(f"Julia backend ready: {backend.as_posix()}")
     return 0
 
 
@@ -266,7 +266,9 @@ steadystate(H, collapse; method="direct")
 
 
 def _julia_string(value: str | Path) -> str:
-    text = str(value)
+    # Julia accepts posix-style paths on every platform, and backslashes
+    # inside Julia string literals read as escape sequences, so normalize.
+    text = value.as_posix() if isinstance(value, Path) else str(value)
     escaped = text.replace("\\", "\\\\").replace('"', '\\"')
     return f'"{escaped}"'
 

@@ -186,7 +186,7 @@ def load_backend(*, instantiate: bool = False) -> Any:
         return _BACKEND
 
     jl = get_julia()
-    path = str(backend_path())
+    path = str(backend_path().as_posix())
     try:
         jl.seval("using Pkg")
         jl.Pkg.activate(path, io=jl.devnull)

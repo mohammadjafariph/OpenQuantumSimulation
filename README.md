@@ -6,11 +6,33 @@
 [![Python](https://img.shields.io/pypi/pyversions/openquantumsim.svg)](https://pypi.org/project/openquantumsim/)
 [![License](https://img.shields.io/pypi/l/openquantumsim.svg)](LICENSE)
 
+![OpenQuantumSim banner](https://raw.githubusercontent.com/mohammadjafariph/OpenQuantumSimulation/main/docs/_static/readme_hero.png)
+
 QuTiP is excellent general-purpose quantum dynamics software. OpenQuantumSim is
 for researchers who want a Python interface while moving expensive open-system
 propagation into a Julia backend: Lindblad solvers, Monte Carlo wave-function
-trajectories, Dicke-space collective spins, restartable parameter sweeps, HDF5
-outputs, phase-space tools, and state diagnostics in one package.
+trajectories, Bloch-Redfield weak-coupling dynamics, Dicke-space collective
+spins, restartable parameter sweeps, HDF5 outputs, phase-space tools, and state
+diagnostics in one package.
+
+- **One import, no glue code.** `import openquantumsim as oqs` gives the full
+  API: spaces, operators, solvers, diagnostics, plotting, and persistence.
+- **Julia speed, Python ergonomics.** Propagation runs in the packaged
+  `OpenQuantumSimJL` backend; arrays go in, named results come back.
+- **Validated, not just benchmarked.** Analytic limits and QuTiP reference
+  models are checked in CI on Linux and Windows.
+
+## How It Fits Together
+
+![OpenQuantumSim architecture](https://raw.githubusercontent.com/mohammadjafariph/OpenQuantumSimulation/main/docs/_static/readme_architecture.png)
+
+The Python API builds Hilbert spaces, operators, and solver calls. The
+`juliacall` bridge dispatches sparse payloads to the packaged Julia backend,
+where the heavy propagation runs (thread-parallel for trajectories). Named
+result tuples flow back into a `Result` object with HDF5 persistence, xarray
+sweep summaries, and matplotlib plotting on the Python side.
+
+## Performance
 
 On the current Apple M1 benchmark snapshot, OpenQuantumSim is 1.3x-2.6x faster
 than QuTiP on deterministic Lindblad reference cases up to Hilbert dimension 80.
@@ -71,14 +93,16 @@ oqs setup-julia
 - Lindblad master-equation propagation with dense and sparse backends.
 - Monte Carlo wave-function trajectories with backend-side aggregation for
   selected diagnostics.
+- Secular Bloch-Redfield dynamics with user-supplied bath spectra.
 - Time-dependent Hamiltonians with callable or interpolated coefficients.
-- Steady-state solves, two-time correlations, and parameter sweeps.
+- Steady-state solves, two-time correlations, FFT spectra, and parameter
+  sweeps.
+- Propagators: unitary evolution and Lindblad superoperators for
+  time-independent systems.
 - State metrics including purity, entropy, fidelity, trace distance,
   populations, coherences, and Bloch-vector components.
 - Entanglement diagnostics: negativity, logarithmic negativity, and
   two-qubit concurrence, plus mutual information on arbitrary cuts.
-- Correlation-function spectra via FFT and propagators (unitary or
-  Lindblad superoperators) for time-independent systems.
 - Wigner and Husimi-Q phase-space distributions for finite Fock spaces.
 - HDF5 result persistence for solver outputs and sweep summaries.
 - Validation scripts comparing analytic limits and QuTiP reference models.
@@ -185,6 +209,29 @@ result = oqs.mcsolve(
     ),
 )
 ```
+
+## Bloch-Redfield Dynamics
+
+Weak system-bath coupling can be modeled with the secular Bloch-Redfield
+equation. Each coupling operator is paired with a spectrum callable giving the
+dissipator weight at a Bohr frequency; decay channels sit at negative
+frequencies.
+
+```python
+kappa = 0.4
+zero_temperature = lambda omega: kappa if omega < 0 else 0.0
+
+result = oqs.brmesolve(
+    H,
+    rho0,
+    times,
+    a_ops=[(oqs.sigmam(atom), zero_temperature)],
+    e_ops=[projector],
+)
+```
+
+A constant spectrum `gamma = g` is equivalent to a Lindblad collapse operator
+`sqrt(g) * A`, which makes BR results easy to sanity-check against `mesolve`.
 
 ## State Diagnostics
 
@@ -304,3 +351,16 @@ benchmarks/                 Benchmark scripts
 scripts/                    Development and validation helpers
 examples/                   Domain examples built on the public API
 ```
+
+## Citation
+
+If you use OpenQuantumSim in your research, please cite the software release
+(see [`CITATION.cff`](CITATION.cff)):
+
+```text
+OpenQuantumSim, Mohammad Jafari, https://github.com/mohammadjafariph/OpenQuantumSimulation
+```
+
+## License
+
+MIT — see [LICENSE](LICENSE).

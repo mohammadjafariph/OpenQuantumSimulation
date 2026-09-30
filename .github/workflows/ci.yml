@@ -9,12 +9,13 @@ on:
 
 jobs:
   python-static:
-    name: Python lint, typing, and unit tests
-    runs-on: ubuntu-latest
+    name: Python lint, typing, and unit tests (${{ matrix.os }}, py${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         python-version: ["3.10", "3.11", "3.12"]
+        os: [ubuntu-latest, windows-latest]
 
     steps:
       - name: Check out repository
@@ -42,8 +43,12 @@ jobs:
         run: python -m pytest tests -m "not physics and not integration and not slow"
 
   python-julia-integration:
-    name: Python-Julia physics tests
-    runs-on: ubuntu-latest
+    name: Python-Julia physics tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
     env:
       PYTHON_JULIAPKG_EXE: julia
       PYTHON_JULIACALL_HANDLE_SIGNALS: yes

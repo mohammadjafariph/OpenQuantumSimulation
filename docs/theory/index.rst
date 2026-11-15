@@ -68,10 +68,20 @@ Quantum Regression Theorem
 --------------------------
 
 Two-time correlations :math:`\langle A(\tau) B(0)\rangle` are computed with
-the quantum regression theorem: the state is evolved to :math:`t=0`, then the
-operator product :math:`B\rho(0) B^\dagger` (with the regression construction
-applied to each collapse operator) is propagated with the same Liouvillian as
-the state itself. ``spectrum_2op_1t`` transforms the sampled correlation with a
+the quantum regression theorem: the operator product :math:`B\rho(0)` is
+propagated over :math:`\tau` with the same Liouvillian :math:`\mathcal{L}` as
+the state itself, and the correlation is the trace against :math:`A`,
+
+.. math::
+
+   \langle A(\tau) B(0)\rangle
+   = \operatorname{Tr}\!\left[ A\, e^{\mathcal{L}\tau} \bigl(B\rho(0)\bigr)
+   \right].
+
+``correlation_2op_1t`` uses the supplied ``rho0`` as :math:`\rho(0)`;
+``correlation_2op_2t`` first evolves the state to each :math:`t` with
+``mesolve`` and applies the same construction to :math:`B\rho(t)`.
+``spectrum_2op_1t`` transforms the sampled correlation with a
 discrete Fourier transform, so the result is the discrete-time spectrum of the
 sampled function rather than its continuum limit.
 

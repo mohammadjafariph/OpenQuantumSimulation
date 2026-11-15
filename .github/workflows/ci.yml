@@ -150,7 +150,9 @@ jobs:
         if: ${{ matrix.julia-version == '1' }}
         run: |
           rm -f src/OpenQuantumSimJL/Manifest.toml
-          julia --project=src/OpenQuantumSimJL -e 'using Pkg; Pkg.resolve()'
+          # A fresh runner has no package registry, and Pkg.resolve() does
+          # not install one, so add it explicitly first.
+          julia --project=src/OpenQuantumSimJL -e 'using Pkg; Pkg.Registry.add("General"); Pkg.resolve()'
 
       - name: Run Julia backend tests
         run: julia --project=src/OpenQuantumSimJL -e 'using Pkg; Pkg.test()'
@@ -197,15 +199,20 @@ jobs:
         run: |
           python -m pip install --no-deps --target /tmp/oqs-wheel-install dist/openquantumsim-*.whl
           python - <<'PY'
-          import importlib.util
+          import importlib
+          import sys
+          import types
           from pathlib import Path
 
-          module_path = Path("/tmp/oqs-wheel-install/openquantumsim/_julia_bridge.py")
-          spec = importlib.util.spec_from_file_location("oqs_julia_bridge", module_path)
-          if spec is None or spec.loader is None:
-              raise SystemExit(f"could not load {module_path}")
-          bridge = importlib.util.module_from_spec(spec)
-          spec.loader.exec_module(bridge)
+          # The wheel is installed without its dependencies, so importing
+          # the package itself would fail on NumPy. Register an empty
+          # stand-in package instead: the bridge and the modules it imports
+          # relatively (errors) only need the standard library.
+          package_dir = Path("/tmp/oqs-wheel-install/openquantumsim")
+          package = types.ModuleType("openquantumsim")
+          package.__path__ = [str(package_dir)]
+          sys.modules["openquantumsim"] = package
+          bridge = importlib.import_module("openquantumsim._julia_bridge")
 
           path = bridge.backend_path()
           assert str(path).startswith("/tmp/oqs-wheel-install/"), path

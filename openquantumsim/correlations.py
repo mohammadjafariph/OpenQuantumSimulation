@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import cast
+from typing import Any, cast
 
 import numpy as np
 from numpy.typing import NDArray
@@ -15,8 +15,10 @@ from .result import Options
 
 Array = NDArray[np.complex128]
 FloatArray = NDArray[np.float64]
-# Time grids may be given as any sequence of floats or as a NumPy array.
-TimeGrid = Sequence[float] | FloatArray
+# Time grids may be given as any sequence of floats or as a NumPy array of
+# any float precision. Older NumPy stubs type ``np.linspace`` as a generic
+# floating array, not ``float64``, so the alias must not name a precision.
+TimeGrid = Sequence[float] | NDArray[np.floating[Any]]
 
 
 def correlation_2op_1t(

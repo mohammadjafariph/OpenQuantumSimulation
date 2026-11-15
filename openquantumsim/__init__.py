@@ -7,6 +7,14 @@ from .correlations import (
     spectrum_2op_1t,
     spectrum_correlation_fft,
 )
+from .errors import (
+    BackendError,
+    ConvergenceError,
+    JuliaBridgeUnavailable,
+    OpenQuantumSimError,
+    SolverError,
+    SolverHealthWarning,
+)
 from .hilbert import CompositeSpace, DickeSpace, FockSpace, HilbertSpace, SpinSpace
 from .observables import (
     StateObservable,
@@ -119,20 +127,26 @@ from .timedep import (
 
 __all__ = [
     "__version__",
+    "BackendError",
     "CompositeSpace",
+    "ConvergenceError",
     "DickeSpace",
     "FockSpace",
     "HamiltonianTerm",
     "HilbertSpace",
     "InterpolatedCoefficient",
     "JaynesCummingsSystem",
+    "JuliaBridgeUnavailable",
     "MCWFSystem",
+    "OpenQuantumSimError",
     "Operator",
     "apply_superoperator",
     "Options",
     "ParameterSweep",
     "QuantumSystem",
     "Result",
+    "SolverError",
+    "SolverHealthWarning",
     "StateObservable",
     "SpinSpace",
     "SweepPoint",

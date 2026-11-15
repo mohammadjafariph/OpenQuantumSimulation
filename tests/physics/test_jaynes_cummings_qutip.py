@@ -3,13 +3,8 @@ import pytest
 
 
 @pytest.mark.physics
-def test_jaynes_cummings_mesolve_matches_qutip() -> None:
-    qutip = pytest.importorskip("qutip")
+def test_jaynes_cummings_mesolve_matches_qutip(qutip: object) -> None:
     import openquantumsim as oqs
-    from openquantumsim._julia_bridge import backend_available
-
-    if not backend_available():
-        pytest.skip("Julia backend is not available.")
 
     cavity_dim = 5
     cavity_frequency = 1.0

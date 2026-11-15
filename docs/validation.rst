@@ -6,6 +6,61 @@ established reference implementations. The current validation gallery covers a
 closed-form qubit decay problem, a damped Jaynes-Cummings comparison against
 QuTiP, and the command used for direct QuTiP speed comparisons.
 
+The Validation Suite
+--------------------
+
+``openquantumsim.validation`` holds 25 small problems whose answers are known
+independently of this library. Each case reports one number, the distance
+between the solver and the known answer, next to the tolerance it must meet.
+
+.. list-table::
+   :header-rows: 1
+
+   * - Group
+     - Cases
+     - Known answer
+   * - Dynamics
+     - 12
+     - Closed formulas, exactly solvable rate equations, and one
+       higher-accuracy reference solve: Rabi oscillation, spontaneous
+       emission, dephasing, damped and thermal oscillators, a thermal qubit,
+       superradiant decay, vacuum Rabi oscillation, a rotating drive, Krylov
+       propagation, Bloch-Redfield thermalisation, and an emission
+       correlation function.
+   * - Steady states
+     - 3
+     - Thermal states and the resonance-fluorescence steady state.
+   * - Monte Carlo
+     - 4
+     - The master equation or an exact rate equation; the deviation is
+       measured in units of the reported standard error.
+   * - Convergence
+     - 3
+     - Errors must shrink as tolerances tighten, integrators must agree, and
+       the standard error must fall as one over the square root of the
+       trajectory count.
+   * - Reference
+     - 3
+     - QuTiP, for a damped Jaynes-Cummings model, a steady state, and a
+       two-time correlation.
+
+Run the suite and write a report:
+
+.. code-block:: bash
+
+   python -m pip install "openquantumsim[validation]"
+   oqs validate --output-dir validation-report
+
+The command prints one line per case, exits non-zero if any case misses its
+tolerance, and writes ``validation_report.md`` and ``validation_report.json``
+with the environment it ran in. ``oqs validate --list`` shows the cases, and
+``oqs validate --case NAME`` runs a selection. The reference group is skipped
+when QuTiP is not installed.
+
+The same cases back ``tests/physics/test_validation_suite.py``, and CI attaches
+the report to every run, so a release cannot pass its tests without also
+passing its validation report.
+
 Analytic Qubit Decay
 --------------------
 

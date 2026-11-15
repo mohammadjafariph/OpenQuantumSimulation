@@ -8,18 +8,21 @@ from typing import cast
 import numpy as np
 from numpy.typing import NDArray
 
-from ._julia_bridge import JuliaBridgeUnavailable, load_backend
+from ._health import check_solver_health
+from ._julia_bridge import call_backend, require_backend
 from .operators import Operator
 from .result import Options
 
 Array = NDArray[np.complex128]
 FloatArray = NDArray[np.float64]
+# Time grids may be given as any sequence of floats or as a NumPy array.
+TimeGrid = Sequence[float] | FloatArray
 
 
 def correlation_2op_1t(
     H: Operator,
     rho0: Array,
-    taulist: Sequence[float],
+    taulist: TimeGrid,
     a_op: Operator,
     b_op: Operator,
     *,
@@ -36,16 +39,9 @@ def correlation_2op_1t(
     c_arrays = [op.to_numpy() for op in c_ops or []]
     _validate_correlation_inputs(H, rho0_array, taus, a_op, b_op, c_arrays, "taulist")
 
-    try:
-        backend = load_backend()
-    except JuliaBridgeUnavailable as exc:
-        msg = (
-            "correlation_2op_1t requires the Julia backend; "
-            "run `oqs setup-julia` first."
-        )
-        raise NotImplementedError(msg) from exc
-
-    raw = backend.correlation_2op_1t(
+    backend = require_backend("correlation_2op_1t")
+    raw = call_backend(
+        backend.correlation_2op_1t,
         H.to_numpy(),
         rho0_array,
         taus,
@@ -54,17 +50,19 @@ def correlation_2op_1t(
         c_arrays,
         rtol=float(opts.rtol),
         atol=float(opts.atol),
-        method=str(opts.method),
+        method=_correlation_method(opts),
         krylov_dim=int(opts.krylov_dim),
+        ode_solver=str(opts.ode_solver),
     )
+    _check_correlation_health("correlation_2op_1t", raw, opts)
     return np.asarray(_field(raw, "correlations"), dtype=np.complex128)
 
 
 def correlation_2op_2t(
     H: Operator,
     rho0: Array,
-    tlist: Sequence[float],
-    taulist: Sequence[float],
+    tlist: TimeGrid,
+    taulist: TimeGrid,
     a_op: Operator,
     b_op: Operator,
     *,
@@ -80,16 +78,9 @@ def correlation_2op_2t(
     _validate_correlation_inputs(H, rho0_array, times, a_op, b_op, c_arrays, "tlist")
     _validate_nonnegative_sorted_times(taus, "taulist")
 
-    try:
-        backend = load_backend()
-    except JuliaBridgeUnavailable as exc:
-        msg = (
-            "correlation_2op_2t requires the Julia backend; "
-            "run `oqs setup-julia` first."
-        )
-        raise NotImplementedError(msg) from exc
-
-    raw = backend.correlation_2op_2t(
+    backend = require_backend("correlation_2op_2t")
+    raw = call_backend(
+        backend.correlation_2op_2t,
         H.to_numpy(),
         rho0_array,
         times,
@@ -99,14 +90,16 @@ def correlation_2op_2t(
         c_arrays,
         rtol=float(opts.rtol),
         atol=float(opts.atol),
-        method=str(opts.method),
+        method=_correlation_method(opts),
         krylov_dim=int(opts.krylov_dim),
+        ode_solver=str(opts.ode_solver),
     )
+    _check_correlation_health("correlation_2op_2t", raw, opts)
     return np.asarray(_field(raw, "correlations"), dtype=np.complex128)
 
 
 def spectrum_correlation_fft(
-    taulist: Sequence[float],
+    taulist: TimeGrid,
     correlation: Array,
 ) -> tuple[FloatArray, Array]:
     """Return the frequency-domain spectrum of a sampled correlation function.
@@ -148,7 +141,7 @@ def spectrum_correlation_fft(
 def spectrum_2op_1t(
     H: Operator,
     rho0: Array,
-    taulist: Sequence[float],
+    taulist: TimeGrid,
     a_op: Operator,
     b_op: Operator,
     *,
@@ -171,6 +164,34 @@ def spectrum_2op_1t(
         options=options,
     )
     return spectrum_correlation_fft(taulist, corr)
+
+
+def _correlation_method(options: Options) -> str:
+    """Pick the propagation method; an explicit ``ode_solver`` implies ``ode``."""
+    if options.method == "auto" and options.ode_solver != "auto":
+        return "ode"
+    return str(options.method)
+
+
+_CORRELATION_STAT_NAMES = (
+    "retcode",
+    "success",
+    "krylov_converged",
+    "krylov_max_residual",
+    "krylov_dim",
+)
+
+
+def _check_correlation_health(solver: str, raw: object, options: Options) -> None:
+    raw_stats = _field(raw, "solver_stats")
+    stats = {name: getattr(raw_stats, name) for name in _CORRELATION_STAT_NAMES}
+    check_solver_health(
+        solver,
+        stats,
+        rtol=options.rtol,
+        strict=options.strict,
+        stacklevel=4,
+    )
 
 
 def _validate_correlation_inputs(

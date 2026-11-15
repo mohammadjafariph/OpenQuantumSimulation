@@ -28,9 +28,37 @@ class QuantumSystem:
     hilbert: HilbertSpace
 
 
+SOLVER_METHODS = ("auto", "ode", "tsit5", "krylov")
+ODE_SOLVERS = ("auto", "tsit5", "vern7", "vern9")
+BACKENDS = ("cpu",)
+
+
 @dataclass(frozen=True)
 class Options:
-    """Solver options shared by Python wrappers."""
+    """Solver options shared by Python wrappers.
+
+    ``method`` selects the propagation strategy: ``"ode"`` (adaptive
+    Runge-Kutta, the default behind ``"auto"``) or ``"krylov"`` (Krylov
+    exponentiation between output times, time-independent problems only).
+    ``ode_solver`` selects the integrator used by ``"ode"``: ``"tsit5"``
+    (default), ``"vern7"`` or ``"vern9"`` for tight tolerances.
+    ``method="tsit5"`` is accepted as an alias for ``method="ode"`` with
+    ``ode_solver="tsit5"``.
+
+    ``strict`` controls what happens when a solver fails: ``True`` (default)
+    raises :class:`~openquantumsim.errors.SolverError`; ``False`` emits a
+    :class:`~openquantumsim.errors.SolverHealthWarning` and returns the
+    partial result, with values after the failure set to NaN.
+
+    ``backend`` names the compute backend. Only ``"cpu"`` exists today.
+
+    Monte Carlo options: ``seed`` makes a run reproducible (``None`` draws a
+    fresh seed, reported as ``solver_stats["base_seed"]``); ``n_jobs`` is the
+    number of threads (``-1`` for all, ``1`` for serial) and never changes
+    the result; ``max_step`` optionally caps the adaptive integrator step.
+    Trajectories are integrated to ``rtol``/``atol`` and jump times are
+    located by root-finding, so no step size has to be chosen.
+    """
 
     method: str = "auto"
     ode_solver: str = "auto"
@@ -44,9 +72,54 @@ class Options:
     save_states: bool = False
     compute_entropy: bool = False
     seed: int | None = None
-    max_step: float = 1e-2
+    max_step: float | None = None
     checkpoint_file: str | None = None
     checkpoint_every: int = 100
+    strict: bool = True
+
+    def __post_init__(self) -> None:
+        if self.method not in SOLVER_METHODS:
+            msg = f"method must be one of {SOLVER_METHODS}; got {self.method!r}."
+            raise ValueError(msg)
+        if self.ode_solver not in ODE_SOLVERS:
+            msg = f"ode_solver must be one of {ODE_SOLVERS}; got {self.ode_solver!r}."
+            raise ValueError(msg)
+        if self.method == "tsit5" and self.ode_solver not in ("auto", "tsit5"):
+            msg = (
+                "method='tsit5' conflicts with "
+                f"ode_solver={self.ode_solver!r}; use method='ode'."
+            )
+            raise ValueError(msg)
+        if self.method == "krylov" and self.ode_solver != "auto":
+            msg = "ode_solver has no effect with method='krylov'; leave it as 'auto'."
+            raise ValueError(msg)
+        if self.backend == "gpu":
+            msg = "backend='gpu' is not implemented yet; use backend='cpu'."
+            raise NotImplementedError(msg)
+        if self.backend not in BACKENDS:
+            msg = f"backend must be one of {BACKENDS}; got {self.backend!r}."
+            raise ValueError(msg)
+        if not self.rtol > 0 or not self.atol > 0:
+            msg = "rtol and atol must be positive."
+            raise ValueError(msg)
+        if self.krylov_dim <= 0:
+            msg = "krylov_dim must be positive."
+            raise ValueError(msg)
+        if self.seed is not None and self.seed < 0:
+            msg = "seed must be non-negative or None."
+            raise ValueError(msg)
+        if self.max_step is not None and not self.max_step > 0:
+            msg = "max_step must be positive or None."
+            raise ValueError(msg)
+        if self.n_traj <= 0:
+            msg = "n_traj must be positive."
+            raise ValueError(msg)
+        if self.n_jobs != -1 and self.n_jobs <= 0:
+            msg = "n_jobs must be -1 or positive."
+            raise ValueError(msg)
+        if self.checkpoint_every <= 0:
+            msg = "checkpoint_every must be positive."
+            raise ValueError(msg)
 
 
 @dataclass

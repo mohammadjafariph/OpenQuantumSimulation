@@ -61,6 +61,7 @@ function mesolve(
     method::AbstractString = "auto",
     krylov_dim::Integer = 30,
     compute_entropy::Bool = true,
+    ode_solver::AbstractString = "auto",
 )
     Hc = _as_complex_operator(H)
     rho0c = _as_complex_matrix(rho0)
@@ -78,10 +79,9 @@ function mesolve(
 
     L = liouvillian(Hc, collapse_ops)
     u0 = vec(copy(rho0c))
-    requested_method = lowercase(String(method))
-    method_name = requested_method == "auto" ? "ode" : requested_method
+    requested_method, method_name, ode_solver_name = _resolve_method(method, ode_solver)
 
-    sol_u, retcode, elapsed = _solve_liouvillian(
+    sol_u, report, elapsed = _solve_liouvillian(
         L,
         u0,
         times;
@@ -89,6 +89,7 @@ function mesolve(
         atol = Float64(atol),
         method_name = method_name,
         krylov_dim = Int(krylov_dim),
+        ode_solver = ode_solver_name,
     )
 
     return _collect_solution(
@@ -99,11 +100,31 @@ function mesolve(
         save_states = save_states,
         compute_entropy = compute_entropy,
         elapsed = elapsed,
-        retcode = retcode,
+        report = report,
         method_name = method_name,
         requested_method = requested_method,
         krylov_dim = Int(krylov_dim),
     )
+end
+
+"""
+Normalise the `method` / `ode_solver` pair. `method` picks the strategy
+(`"ode"` or `"krylov"`); `ode_solver` picks the integrator used by `"ode"`.
+`method = "tsit5"` is kept as an alias for `method = "ode"` with Tsit5.
+"""
+function _resolve_method(method::AbstractString, ode_solver::AbstractString)
+    requested_method = lowercase(String(method))
+    solver_name = lowercase(String(ode_solver))
+    if requested_method == "tsit5"
+        solver_name in ("auto", "tsit5") || throw(ArgumentError(
+            "method = \"tsit5\" conflicts with ode_solver = \"$(solver_name)\".",
+        ))
+        return requested_method, "ode", "tsit5"
+    end
+    method_name = requested_method == "auto" ? "ode" : requested_method
+    method_name in ("ode", "krylov") ||
+        throw(ArgumentError("unknown solver method: $(method_name)"))
+    return requested_method, method_name, solver_name
 end
 
 function _solve_liouvillian(
@@ -114,53 +135,45 @@ function _solve_liouvillian(
     atol::Real = 1e-10,
     method_name::AbstractString = "ode",
     krylov_dim::Integer = 30,
+    ode_solver::AbstractString = "auto",
 )
+    local sol_u, report
     elapsed = @elapsed begin
-        if length(times) == 1
-            sol_u = [u0]
-            retcode = "Success"
-        elseif method_name == "krylov"
-            sol_u = Vector{Vector{ComplexF64}}(undef, length(times))
-            sol_u[1] = u0
-            for idx in 2:length(times)
-                dt = times[idx] - times[idx - 1]
-                sol_u[idx] = krylov_expmv(
-                    L,
-                    dt,
-                    sol_u[idx - 1];
-                    krylov_dim = krylov_dim,
-                    tol = max(Float64(rtol), Float64(atol)),
-                )
-            end
-            retcode = "Success"
-        elseif method_name in ("ode", "tsit5")
-            rhs!(du, u, _p, _t) = (mul!(du, L, u); nothing)
-            problem = ODEProblem(rhs!, u0, (times[1], times[end]))
-            sol = solve(
-                problem,
-                Tsit5();
-                saveat = times,
-                reltol = Float64(rtol),
-                abstol = Float64(atol),
+        if method_name == "krylov"
+            sol_u, report = _solve_krylov_at_times(
+                L,
+                u0,
+                times,
+                times[1];
+                tol = max(Float64(rtol), Float64(atol)),
+                krylov_dim = krylov_dim,
             )
-            sol_u = sol.u
-            retcode = string(sol.retcode)
+        elseif method_name == "ode"
+            sol_u, report = _solve_ode_at_times(
+                _linear_rhs!,
+                u0,
+                times,
+                L;
+                rtol = rtol,
+                atol = atol,
+                ode_solver = ode_solver,
+            )
         else
             throw(ArgumentError("unknown solver method: $(method_name)"))
         end
     end
-    return sol_u, retcode, elapsed
+    return sol_u, report, elapsed
 end
 
 function _collect_solution(
     sol_u,
     times::Vector{Float64},
     d::Integer,
-    expectation_ops::Vector{SparseMatrixCSC{ComplexF64, Int64}};
+    expectation_ops::Vector{<:AbstractMatrix{ComplexF64}};
     save_states::Bool = false,
     compute_entropy::Bool = true,
     elapsed::Real = 0.0,
-    retcode::AbstractString = "Success",
+    report = _ode_report(),
     method_name::AbstractString = "ode",
     requested_method::AbstractString = "auto",
     krylov_dim::Integer = 30,
@@ -173,9 +186,11 @@ function _collect_solution(
 
     for idx in 1:n_times
         rho = reshape(sol_u[idx], d, d)
+        finite = all(isfinite, rho)
         if compute_entropy
-            rho_h = Hermitian((rho .+ rho') ./ 2)
-            entropy_values[idx] = von_neumann_entropy(rho_h)
+            entropy_values[idx] = finite ?
+                von_neumann_entropy(Hermitian((rho .+ rho') ./ 2)) :
+                NaN
         end
         for op_idx in 1:n_expect
             expect_values[op_idx, idx] = expect(expectation_ops[op_idx], rho)
@@ -185,20 +200,31 @@ function _collect_solution(
         end
     end
 
+    health = _density_health(sol_u, d)
     return (
         times = times,
         states = states,
         expect = expect_values,
         entropy = entropy_values,
         solver_stats = (
-            nsteps = length(sol_u) - 1,
-            nfev = 0,
+            nsteps = report.nsteps,
+            nfev = report.nfev,
+            nreject = report.nreject,
             wall_time = elapsed,
-            retcode = retcode,
+            retcode = report.retcode,
+            success = report.success,
             method = method_name,
             requested_method = requested_method,
+            ode_solver = report.ode_solver,
             krylov_dim = Int(krylov_dim),
+            krylov_converged = report.krylov_converged,
+            krylov_max_residual = report.krylov_max_residual,
             compute_entropy = compute_entropy,
+            trace_drift = health.trace_drift,
+            hermiticity_drift = health.hermiticity_drift,
+            min_eigenvalue = health.min_eigenvalue,
+            positivity_samples = health.positivity_samples,
+            n_nonfinite_states = health.n_nonfinite_states,
         ),
     )
 end

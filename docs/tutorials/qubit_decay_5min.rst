@@ -125,7 +125,7 @@ Carlo wave-function trajectories:
        c_ops=[collapse],
        e_ops=[projector],
        n_traj=1000,
-       options=oqs.Options(seed=2026, max_step=0.01),
+       options=oqs.Options(seed=2026),
    )
 
    mean_population = mc.expect[0].real

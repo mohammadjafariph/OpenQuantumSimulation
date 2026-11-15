@@ -40,6 +40,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             precompile_workload=not args.no_precompile_workload,
             keep_build_dir=args.keep_build_dir,
         )
+    if command == "validate":
+        return validate_command(
+            output_dir=args.output_dir,
+            cases=args.case,
+            list_cases=args.list,
+        )
     parser.print_help()
     return 1
 
@@ -50,6 +56,42 @@ def setup_julia_command() -> int:
     load_backend(instantiate=True)
     print(f"Julia backend ready: {backend.as_posix()}")
     return 0
+
+
+def validate_command(
+    *,
+    output_dir: Path | None = None,
+    cases: Sequence[str] | None = None,
+    list_cases: bool = False,
+) -> int:
+    """Run the validation suite; exit non-zero if any case fails."""
+    from . import validation
+
+    if list_cases:
+        for case in validation.validation_cases():
+            print(f"{case.name:<34} {case.solver:<26} {case.title}")
+        return 0
+
+    try:
+        report = validation.run_validation(
+            cases or None,
+            progress=validation._print_progress,
+        )
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+
+    counts = report.counts()
+    print(
+        f"Validation {'PASSED' if report.passed else 'FAILED'}: "
+        f"{counts['passed']} passed, {counts['failed']} failed, "
+        f"{counts['error']} errored, {counts['skipped']} skipped."
+    )
+    if output_dir is not None:
+        markdown_path, json_path = report.write(output_dir)
+        print(f"Report: {markdown_path.as_posix()}")
+        print(f"Data:   {json_path.as_posix()}")
+    return 0 if report.passed else 1
 
 
 def build_sysimage_command(
@@ -159,6 +201,29 @@ def _build_parser() -> argparse.ArgumentParser:
         "--keep-build-dir",
         action="store_true",
         help="Keep the temporary build project for debugging.",
+    )
+
+    validate = subparsers.add_parser(
+        "validate",
+        help="Run the validation suite against known answers and write a report.",
+    )
+    validate.add_argument(
+        "--output-dir",
+        type=Path,
+        default=None,
+        help="Directory for validation_report.md and validation_report.json.",
+    )
+    validate.add_argument(
+        "--case",
+        action="append",
+        default=None,
+        metavar="NAME",
+        help="Run only this case; repeat to select several.",
+    )
+    validate.add_argument(
+        "--list",
+        action="store_true",
+        help="List the validation cases and exit.",
     )
     return parser
 

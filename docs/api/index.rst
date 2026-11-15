@@ -18,3 +18,5 @@ OpenQuantumSim API.
    results
    observables
    timedep
+   errors
+   validation

@@ -14,6 +14,17 @@ import sys
 from pathlib import Path
 from typing import Any, TypedDict
 
+from .errors import BackendError, JuliaBridgeUnavailable
+
+__all__ = [
+    "BackendError",
+    "JuliaBridgeUnavailable",
+    "backend_available",
+    "call_backend",
+    "load_backend",
+    "require_backend",
+]
+
 SYSIMAGE_ENV = "OPENQUANTUMSIM_JULIA_SYSIMAGE"
 USE_SYSIMAGE_ENV = "OPENQUANTUMSIM_USE_SYSIMAGE"
 CACHE_DIR_ENV = "OPENQUANTUMSIM_CACHE_DIR"
@@ -32,10 +43,6 @@ class SysimageMetadata(TypedDict):
     platform: str
     machine: str
     created_at: str
-
-
-class JuliaBridgeUnavailable(RuntimeError):
-    """Raised when the Julia backend cannot be loaded."""
 
 
 _JL: Any | None = None
@@ -228,3 +235,51 @@ def backend_available() -> bool:
     except JuliaBridgeUnavailable:
         return False
     return True
+
+
+def require_backend(caller: str) -> Any:
+    """Load the backend for ``caller`` or explain how to set it up."""
+    try:
+        return load_backend()
+    except JuliaBridgeUnavailable as exc:
+        msg = f"{caller} requires the Julia backend; run `oqs setup-julia` first."
+        raise JuliaBridgeUnavailable(msg) from exc
+
+
+def call_backend(function: Any, *args: Any, **kwargs: Any) -> Any:
+    """Call a backend function, converting Julia exceptions to ``BackendError``.
+
+    The original ``juliacall`` exception, including the Julia stack trace, is
+    kept as ``__cause__``.
+    """
+    try:
+        return function(*args, **kwargs)
+    except Exception as exc:
+        if not _is_julia_error(exc):
+            raise
+        julia_type, message = _describe_julia_error(exc)
+        raise BackendError(message, julia_type=julia_type) from exc
+
+
+def _is_julia_error(exc: BaseException) -> bool:
+    return any(base.__name__ == "JuliaError" for base in type(exc).__mro__)
+
+
+def _describe_julia_error(exc: BaseException) -> tuple[str | None, str]:
+    """Return the Julia exception type name and its one-paragraph message."""
+    inner = getattr(exc, "exception", None)
+    julia_type: str | None = None
+    message = ""
+    if inner is not None and _JL is not None:
+        try:
+            julia_type = str(_JL.seval("x -> string(nameof(typeof(x)))")(inner))
+            message = str(_JL.seval("x -> sprint(showerror, x)")(inner))
+        except Exception:
+            julia_type = None
+            message = ""
+    if not message:
+        message = str(exc).split("\nStacktrace:", maxsplit=1)[0].strip()
+    prefix = "Julia backend error"
+    if julia_type:
+        prefix = f"{prefix} ({julia_type})"
+    return julia_type, f"{prefix}: {message}"

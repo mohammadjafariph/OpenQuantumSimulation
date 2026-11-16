@@ -16,7 +16,7 @@ diagnostics without leaving the Python scientific stack.
 - **Julia speed, Python ergonomics.** Propagation runs in the packaged
   ``OpenQuantumSimJL`` backend; arrays go in, named results come back.
 - **Validated, not just benchmarked.** Analytic limits and QuTiP reference
-  models are checked in CI on Linux and Windows.
+  models are checked in CI on Linux, macOS, and Windows.
 
 .. image:: _static/readme_architecture.png
    :alt: OpenQuantumSim architecture
@@ -51,7 +51,11 @@ see the repository ``CITATION.cff``.
    :maxdepth: 2
    :caption: Background
 
-   theory/index
-   validation
-   performance
-   case_studies
+   theory/index
+
+   validation
+
+   performance
+
+   case_studies
+

@@ -1,4 +1,5 @@
 using Test
+using HDF5
 using LinearAlgebra
 using OpenQuantumSimJL
 
@@ -536,5 +537,438 @@ end
         ComplexF64[0 1; 0 0],
         [lowering],
         [spectrum],
+    )
+end
+
+function _driven_cavity(n::Int; drive = 2.0, detuning = 1.0, kappa = 0.5)
+    a = zeros(ComplexF64, n, n)
+    for k in 1:(n - 1)
+        a[k, k + 1] = sqrt(k)
+    end
+    H = drive * (a + a') + detuning * a' * a
+    rho0 = zeros(ComplexF64, n, n)
+    rho0[1, 1] = 1
+    return H, [sqrt(kappa) * a], rho0
+end
+
+@testset "solver health: healthy run statistics" begin
+    gamma = 0.3
+    H = zeros(ComplexF64, 2, 2)
+    sm = ComplexF64[0 0; 1 0]
+    rho0 = ComplexF64[1 0; 0 0]
+    times = collect(range(0.0, 5.0; length=51))
+
+    result = mesolve(H, rho0, times, [sqrt(gamma) * sm], [rho0], 1e-8, 1e-10, false)
+    stats = result.solver_stats
+
+    @test stats.success
+    @test stats.retcode == "Success"
+    @test stats.ode_solver == "tsit5"
+    @test stats.nsteps > 0
+    @test stats.nfev > stats.nsteps
+    @test stats.krylov_converged
+    @test stats.trace_drift < 1e-10
+    @test stats.hermiticity_drift < 1e-10
+    @test stats.min_eigenvalue > -1e-10
+    @test stats.positivity_samples == length(times)
+    @test stats.n_nonfinite_states == 0
+end
+
+@testset "solver health: integrator failure is reported, not hidden" begin
+    H0 = zeros(ComplexF64, 2, 2)
+    Hdrive = ComplexF64[0 1; 1 0]
+    rho0 = ComplexF64[1 0; 0 0]
+    times = collect(range(0.0, 3.0; length=13))
+    broken_drive(t) = t > 1.0 ? NaN : 0.4
+
+    result = mesolve_time_dependent(
+        H0,
+        [Hdrive],
+        [broken_drive],
+        rho0,
+        times,
+        Matrix{ComplexF64}[],
+        [rho0],
+        1e-8,
+        1e-10,
+        true,
+    )
+    stats = result.solver_stats
+    population = real.(result.expect[1, :])
+
+    @test !stats.success
+    @test stats.retcode != "Success"
+    @test stats.n_nonfinite_states > 0
+    @test size(result.expect, 2) == length(times)
+    @test size(result.states, 3) == length(times)
+    # Values before the failure are still correct; values after it are NaN.
+    @test population[1:5] ≈ cos.(0.4 .* times[1:5]) .^ 2 rtol=1e-6
+    @test all(isnan, population[6:end])
+end
+
+@testset "solver health: Krylov non-convergence is reported" begin
+    H, c_ops, rho0 = _driven_cavity(12)
+    projector = copy(rho0)
+
+    starved = mesolve(H, rho0, [0.0, 50.0], c_ops, [projector], 1e-10, 1e-10, false, "krylov", 4)
+    @test !starved.solver_stats.success
+    @test !starved.solver_stats.krylov_converged
+    @test starved.solver_stats.retcode == "KrylovNotConverged"
+    @test starved.solver_stats.krylov_max_residual > 1.0
+
+    healthy = mesolve(H, rho0, [0.0, 50.0], c_ops, [projector], 1e-10, 1e-10, false, "krylov", 30)
+    reference = mesolve(H, rho0, [0.0, 50.0], c_ops, [projector], 1e-10, 1e-12, false, "ode", 30, false, "vern7")
+    @test healthy.solver_stats.success
+    @test healthy.solver_stats.krylov_converged
+    @test healthy.solver_stats.nfev > 0
+    @test healthy.expect ≈ reference.expect atol=1e-7
+
+    info = krylov_expmv_info(
+        liouvillian(OpenQuantumSimJL._as_complex_operator(H), OpenQuantumSimJL._as_complex_operators(c_ops)),
+        50.0,
+        vec(rho0);
+        krylov_dim = 4,
+        tol = 1e-10,
+    )
+    @test !info.converged
+end
+
+@testset "solver health: correlation functions report propagation failures" begin
+    H, c_ops, rho0 = _driven_cavity(12)
+    a = c_ops[1] ./ sqrt(0.5)
+
+    starved = correlation_2op_1t(H, rho0, [0.0, 50.0], a, a', c_ops; krylov_dim = 4)
+    @test !starved.solver_stats.success
+    @test !starved.solver_stats.krylov_converged
+
+    krylov = correlation_2op_1t(H, rho0, [0.0, 1.0, 2.0], a, a', c_ops; krylov_dim = 30)
+    ode = correlation_2op_1t(H, rho0, [0.0, 1.0, 2.0], a, a', c_ops; method = "ode", ode_solver = "vern7")
+    @test krylov.solver_stats.success
+    @test ode.solver_stats.success
+    @test krylov.correlations ≈ ode.correlations atol=1e-7
+
+    # A delay grid that does not start at zero is still propagated from zero.
+    late = correlation_2op_1t(H, rho0, [1.0, 2.0], a, a', c_ops; method = "ode", ode_solver = "vern7")
+    @test late.correlations ≈ ode.correlations[2:3] atol=1e-9
+end
+
+@testset "steadystate reports convergence" begin
+    H, c_ops, _ = _driven_cavity(25)
+
+    direct = steadystate_info(H, c_ops; method = "direct")
+    @test direct.solver_stats.success
+    @test direct.solver_stats.method == "direct"
+    @test direct.solver_stats.relative_residual < 1e-12
+    @test direct.solver_stats.min_eigenvalue > -1e-10
+    @test tr(direct.rho) ≈ 1
+
+    # Unpreconditioned GMRES stagnates on this problem. That must be visible.
+    gmres = steadystate_info(H, c_ops; method = "iterative-gmres", rtol = 1e-10, krylov_dim = 30)
+    @test !gmres.solver_stats.success
+    @test !gmres.solver_stats.converged
+    @test gmres.solver_stats.retcode == "GMRESNotConverged"
+    @test gmres.solver_stats.relative_residual > 1e-6
+
+    # The default picks the direct solve for systems this small.
+    auto = steadystate_info(H, c_ops)
+    @test auto.solver_stats.requested_method == "auto"
+    @test auto.solver_stats.method == "direct"
+    @test auto.rho ≈ direct.rho
+    @test steadystate(H, c_ops) ≈ direct.rho
+
+    @test_throws ArgumentError steadystate_info(H, c_ops; method = "magic")
+end
+
+@testset "ode_solver selection and repeated output times" begin
+    gamma = 0.3
+    H = zeros(ComplexF64, 2, 2)
+    sm = ComplexF64[0 0; 1 0]
+    rho0 = ComplexF64[1 0; 0 0]
+    times = collect(range(0.0, 5.0; length=51))
+    expected = exp.(-gamma .* times)
+
+    for solver in ("tsit5", "vern7", "vern9")
+        result = mesolve(H, rho0, times, [sqrt(gamma) * sm], [rho0], 1e-10, 1e-12, false, "ode", 30, false, solver)
+        @test result.solver_stats.ode_solver == solver
+        @test real.(result.expect[1, :]) ≈ expected atol=1e-8
+    end
+    @test_throws ArgumentError mesolve(H, rho0, times, [sqrt(gamma) * sm], [rho0], 1e-8, 1e-10, false, "ode", 30, false, "euler")
+    @test_throws ArgumentError mesolve(H, rho0, times, [sqrt(gamma) * sm], [rho0], 1e-8, 1e-10, false, "tsit5", 30, false, "vern7")
+    @test_throws ArgumentError mesolve(H, rho0, times, [sqrt(gamma) * sm], [rho0], 1e-8, 1e-10, false, "magic")
+
+    repeated = [0.0, 1.0, 1.0, 2.0]
+    for method in ("ode", "krylov")
+        result = mesolve(H, rho0, repeated, [sqrt(gamma) * sm], [rho0], 1e-9, 1e-11, false, method)
+        @test result.solver_stats.success
+        @test real.(result.expect[1, :]) ≈ exp.(-gamma .* repeated) atol=1e-7
+    end
+
+    single = mesolve(H, rho0, [0.7], [sqrt(gamma) * sm], [rho0], 1e-9, 1e-11, true)
+    @test single.solver_stats.success
+    @test single.states[:, :, 1] ≈ rho0
+end
+
+@testset "trajectory random streams" begin
+    stream = OpenQuantumSimJL._trajectory_rng
+
+    # Pinned values: the stream derivation must not change silently, because
+    # that would change every seeded result and break checkpoint resumes.
+    first_stream = stream(UInt64(2026), 1)
+    @test rand(first_stream) == 0.31798548078062383
+    @test rand(first_stream) == 0.88198100494944
+    @test rand(stream(UInt64(2026), 2)) == 0.3388444168125838
+    @test rand(stream(UInt64(1), 1), UInt64) == 0x278d16b7748d639f
+
+    # Same (seed, trajectory) gives the same stream; anything else differs.
+    @test rand(stream(UInt64(7), 3), 8) == rand(stream(UInt64(7), 3), 8)
+    @test rand(stream(UInt64(7), 3), 8) != rand(stream(UInt64(7), 4), 8)
+    @test rand(stream(UInt64(7), 3), 8) != rand(stream(UInt64(8), 3), 8)
+    # (seed, index) pairs that share a sum must not share a stream.
+    @test rand(stream(UInt64(1), 2), 8) != rand(stream(UInt64(2), 1), 8)
+    @test_throws ArgumentError stream(UInt64(1), 0)
+
+    # Uniformity of the first draw across many trajectories.
+    draws = [rand(stream(UInt64(99), idx)) for idx in 1:20_000]
+    @test all(0 .<= draws .< 1)
+    @test abs(sum(draws) / length(draws) - 0.5) < 0.01
+    @test abs(sum(abs2, draws) / length(draws) - 1 / 3) < 0.01
+
+    @test OpenQuantumSimJL._resolve_base_seed(42) == UInt64(42)
+    @test OpenQuantumSimJL._resolve_base_seed(0) != OpenQuantumSimJL._resolve_base_seed(0)
+    @test_throws ArgumentError OpenQuantumSimJL._resolve_base_seed(-1)
+end
+
+@testset "mcsolve refuses checkpoints from the old generator" begin
+    gamma = 0.35
+    H = zeros(ComplexF64, 2, 2)
+    sm = ComplexF64[0 0; 1 0]
+    psi0 = ComplexF64[1, 0]
+    excited_projector = ComplexF64[1 0; 0 0]
+    times = collect(range(0.0, 1.0; length=6))
+    checkpoint_file = tempname() * ".h5"
+
+    mcsolve(H, psi0, times, [sqrt(gamma) * sm], [excited_projector], 10, 505, 0.01, 1, checkpoint_file, 5)
+    h5open(checkpoint_file, "r") do file
+        @test read_attribute(file, "format_version") == "2"
+        @test read_attribute(file, "rng") == OpenQuantumSimJL.MCSOLVE_RNG_NAME
+    end
+
+    h5open(checkpoint_file, "r+") do file
+        delete_attribute(file, "format_version")
+        write_attribute(file, "format_version", "1")
+    end
+    @test_throws ArgumentError mcsolve(
+        H, psi0, times, [sqrt(gamma) * sm], [excited_projector], 20, 505, 0.01, 1, checkpoint_file, 5,
+    )
+end
+
+@testset "waiting-time trajectories: closed-system evolution" begin
+    omega = 0.8
+    H = ComplexF64[0 omega / 2; omega / 2 0]
+    psi0 = ComplexF64[1, 0]
+    projector = ComplexF64[1 0; 0 0]
+    times = collect(range(0.0, 20.0; length=101))
+
+    result = single_trajectory(H, psi0, times, Matrix{ComplexF64}[], [projector], 7, 0.0, true, 1e-10, 1e-12)
+    stats = result.solver_stats
+
+    @test stats.success
+    @test stats.retcode == "Success"
+    @test stats.method == "waiting-time"
+    @test stats.n_jumps == 0
+    @test stats.nfev > 0
+    @test stats.base_seed == 7
+    @test real.(result.expect[1, :]) ≈ cos.(0.5 .* omega .* times) .^ 2 atol=1e-8
+    @test all(norm(result.states[:, idx]) ≈ 1 for idx in axes(result.states, 2))
+    @test result.final_state ≈ result.states[:, end]
+
+    # The initial ket is normalised; its scale must not change the physics.
+    scaled = single_trajectory(H, 3.0 .* psi0, times, Matrix{ComplexF64}[], [projector], 7, 0.0, false, 1e-10, 1e-12)
+    @test scaled.expect ≈ result.expect
+    @test size(scaled.states) == (2, 0)
+end
+
+@testset "waiting-time trajectories: jumps" begin
+    gamma = 0.7
+    H = zeros(ComplexF64, 2, 2)
+    sm = ComplexF64[0 0; 1 0]
+    psi0 = ComplexF64[1, 0]
+    projector = ComplexF64[1 0; 0 0]
+    times = collect(range(0.0, 20.0; length=2001))
+
+    # A decaying qubit jumps exactly once, and stays in the ground state after.
+    result = single_trajectory(H, psi0, times, [sqrt(gamma) * sm], [projector], 11, 0.0, true)
+    population = real.(result.expect[1, :])
+    @test result.solver_stats.n_jumps == 1
+    @test result.solver_stats.success
+    @test all(value -> isapprox(value, 0; atol=1e-12) || isapprox(value, 1; atol=1e-12), population)
+    @test issorted(population; rev=true)
+    @test population[1] ≈ 1
+    @test population[end] ≈ 0 atol=1e-12
+
+    # The jump time does not depend on the output grid or the step cap.
+    jump_index = findfirst(<(0.5), population)
+    coarse_times = [0.0, times[jump_index - 1], times[jump_index], 20.0]
+    coarse = single_trajectory(H, psi0, coarse_times, [sqrt(gamma) * sm], [projector], 11, 0.0, false)
+    capped = single_trajectory(H, psi0, coarse_times, [sqrt(gamma) * sm], [projector], 11, 0.05, false)
+    @test real.(coarse.expect[1, :]) ≈ [1, 1, 0, 0] atol=1e-12
+    @test real.(capped.expect[1, :]) ≈ [1, 1, 0, 0] atol=1e-12
+
+    # Same seed, same trajectory; different seed, different jump time.
+    again = single_trajectory(H, psi0, times, [sqrt(gamma) * sm], [projector], 11, 0.0, false)
+    other = single_trajectory(H, psi0, times, [sqrt(gamma) * sm], [projector], 12, 0.0, false)
+    @test again.expect == result.expect
+    @test other.expect != result.expect
+
+    # Waiting times are exponentially distributed with rate gamma.
+    jump_times = Float64[]
+    for seed in 1:4000
+        run = single_trajectory(H, psi0, times, [sqrt(gamma) * sm], [projector], seed, 0.0, false)
+        index = findfirst(<(0.5), real.(run.expect[1, :]))
+        index === nothing || push!(jump_times, times[index] - 0.005)
+    end
+    @test length(jump_times) == 4000
+    mean_time = sum(jump_times) / length(jump_times)
+    @test mean_time ≈ 1 / gamma rtol=0.05
+    @test sum(abs2, jump_times .- mean_time) / length(jump_times) ≈ 1 / gamma^2 rtol=0.1
+end
+
+@testset "mcsolve is unbiased when decay is fast" begin
+    # gamma * (output spacing) = 0.4: a first-order fixed-step jump rule is
+    # visibly biased here (it failed this test by more than 7 standard errors).
+    gamma = 20.0
+    H = zeros(ComplexF64, 2, 2)
+    sm = ComplexF64[0 0; 1 0]
+    psi0 = ComplexF64[1, 0]
+    projector = ComplexF64[1 0; 0 0]
+    times = collect(range(0.0, 0.5; length=26))
+    n_traj = 20_000
+
+    result = mcsolve(H, psi0, times, [sqrt(gamma) * sm], [projector], n_traj, 2026)
+    exact = exp.(-gamma .* times)
+    deviation = abs.(real.(result.expect[1, :]) .- exact)
+    scale = max.(result.expect_stderr[1, :], 1 / n_traj)
+
+    @test result.solver_stats.success
+    @test result.solver_stats.n_failed_trajectories == 0
+    @test result.solver_stats.method == "waiting-time"
+    @test result.solver_stats.max_step == 0.0
+    @test result.solver_stats.rng == OpenQuantumSimJL.MCSOLVE_RNG_NAME
+    @test result.solver_stats.base_seed == 2026
+    @test result.solver_stats.n_jumps <= n_traj
+    @test result.solver_stats.n_jumps > 0.99 * n_traj
+    @test maximum(deviation ./ scale) < 4.5
+    @test result.expect_stderr[1, 2:end] ≈ sqrt.(exact[2:end] .* (1 .- exact[2:end]) ./ n_traj) rtol=0.2
+end
+
+@testset "mcsolve matches mesolve for a driven, decaying qubit" begin
+    omega, gamma = 1.0, 0.4
+    H = ComplexF64[0 omega / 2; omega / 2 0]
+    sm = ComplexF64[0 0; 1 0]
+    sy = ComplexF64[0 -1im; 1im 0]
+    psi0 = ComplexF64[1, 0]
+    projector = ComplexF64[1 0; 0 0]
+    times = collect(range(0.0, 10.0; length=41))
+    n_traj = 6000
+
+    exact = mesolve(H, psi0 * psi0', times, [sqrt(gamma) * sm], [projector, sy], 1e-10, 1e-12, false)
+    sampled = mcsolve(H, psi0, times, [sqrt(gamma) * sm], [projector, sy], n_traj, 31)
+
+    deviation = abs.(real.(sampled.expect) .- real.(exact.expect))
+    scale = max.(sampled.expect_stderr, 1 / n_traj)
+    @test maximum(deviation ./ scale) < 4.5
+    @test sampled.solver_stats.success
+    @test sampled.solver_stats.n_jumps > n_traj
+end
+
+@testset "mcsolve result is independent of the thread request" begin
+    omega, gamma = 1.0, 0.4
+    H = ComplexF64[0 omega / 2; omega / 2 0]
+    sm = ComplexF64[0 0; 1 0]
+    psi0 = ComplexF64[1, 0]
+    projector = ComplexF64[1 0; 0 0]
+    times = collect(range(0.0, 5.0; length=21))
+
+    serial = mcsolve(H, psi0, times, [sqrt(gamma) * sm], [projector], 300, 77, 0.0, 1)
+    all_threads = mcsolve(H, psi0, times, [sqrt(gamma) * sm], [projector], 300, 77, 0.0, -1)
+    two = mcsolve(H, psi0, times, [sqrt(gamma) * sm], [projector], 300, 77, 0.0, 2)
+    batched = mcsolve(H, psi0, times, [sqrt(gamma) * sm], [projector], 300, 77, 0.0, -1, "", 64, true)
+
+    @test serial.solver_stats.n_workers == 1
+    @test !serial.solver_stats.threaded
+    @test all_threads.solver_stats.n_workers == Threads.nthreads()
+    @test two.solver_stats.n_workers == min(2, Threads.nthreads())
+    # Bit-identical, not merely close: every trajectory starts from the same
+    # integrator state and its own random stream, whatever the work split.
+    for other in (all_threads, two, batched)
+        @test other.expect == serial.expect
+        @test other.expect_stderr == serial.expect_stderr
+        @test other.solver_stats.n_jumps == serial.solver_stats.n_jumps
+    end
+
+    # Tolerances are part of the result: tighter tolerances move jump times
+    # only slightly, so the averages agree far below the statistical error.
+    tight = mcsolve(H, psi0, times, [sqrt(gamma) * sm], [projector], 300, 77, 0.0, 1, "", 100, false, 1e-11, 1e-13)
+    @test tight.expect ≈ serial.expect atol=1e-5
+    vern = mcsolve(H, psi0, times, [sqrt(gamma) * sm], [projector], 300, 77, 0.0, 1, "", 100, false, 1e-10, 1e-12, "vern7")
+    @test vern.solver_stats.ode_solver == "vern7"
+    @test vern.expect ≈ tight.expect atol=1e-5
+end
+
+@testset "mcsolve edge cases and failure reporting" begin
+    gamma = 0.35
+    H = zeros(ComplexF64, 2, 2)
+    sm = ComplexF64[0 0; 1 0]
+    psi0 = ComplexF64[1, 0]
+    projector = ComplexF64[1 0; 0 0]
+
+    # A single output time, and repeated output times.
+    single = mcsolve(H, psi0, [0.3], [sqrt(gamma) * sm], [projector], 10, 5)
+    @test single.solver_stats.success
+    @test real.(single.expect[1, :]) ≈ [1.0]
+    repeated = mcsolve(H, psi0, [0.0, 1.0, 1.0, 2.0], [sqrt(gamma) * sm], [projector], 200, 5)
+    @test repeated.expect[1, 2] == repeated.expect[1, 3]
+    @test repeated.solver_stats.success
+
+    # A dark state never jumps.
+    dark = mcsolve(H, ComplexF64[0, 1], [0.0, 5.0, 10.0], [sqrt(gamma) * sm], [projector], 50, 5)
+    @test dark.solver_stats.n_jumps == 0
+    @test maximum(abs, dark.expect) < 1e-12
+
+    # A trajectory that cannot be integrated is counted, not hidden.
+    broken = ComplexF64[NaN 0; 0 0]
+    failed = mcsolve(broken, psi0, [0.0, 1.0], [sqrt(gamma) * sm], [projector], 4, 5)
+    @test !failed.solver_stats.success
+    @test failed.solver_stats.n_failed_trajectories == 4
+    @test failed.solver_stats.retcode != "Success"
+    @test isnan(real(failed.expect[1, end]))
+    lone = single_trajectory(broken, psi0, [0.0, 1.0], [sqrt(gamma) * sm], [projector], 5)
+    @test !lone.solver_stats.success
+    @test lone.solver_stats.n_failed_trajectories == 1
+
+    @test_throws ArgumentError mcsolve(H, psi0, [0.0, 1.0], [sqrt(gamma) * sm], [projector], 4, 5, -0.1)
+    @test_throws ArgumentError mcsolve(H, ComplexF64[0, 0], [0.0, 1.0], [sqrt(gamma) * sm], [projector], 4, 5)
+    @test_throws ArgumentError mcsolve(H, psi0, [0.0, 1.0], [sqrt(gamma) * sm], [projector], 4, 5, 0.0, 1, "", 100, false, 1e-8, 1e-10, "euler")
+end
+
+@testset "mcsolve checkpoints are tied to solver settings" begin
+    gamma = 0.35
+    H = zeros(ComplexF64, 2, 2)
+    sm = ComplexF64[0 0; 1 0]
+    psi0 = ComplexF64[1, 0]
+    projector = ComplexF64[1 0; 0 0]
+    times = collect(range(0.0, 2.0; length=11))
+    checkpoint_file = tempname() * ".h5"
+
+    mcsolve(H, psi0, times, [sqrt(gamma) * sm], [projector], 20, 505, 0.0, 1, checkpoint_file, 10)
+    resumed = mcsolve(H, psi0, times, [sqrt(gamma) * sm], [projector], 60, 505, 0.0, -1, checkpoint_file, 10)
+    clean = mcsolve(H, psi0, times, [sqrt(gamma) * sm], [projector], 60, 505)
+    @test resumed.solver_stats.resumed
+    @test resumed.expect == clean.expect
+    @test resumed.expect_stderr == clean.expect_stderr
+
+    # Resuming with different tolerances would mix two different solvers.
+    @test_throws ArgumentError mcsolve(
+        H, psi0, times, [sqrt(gamma) * sm], [projector], 80, 505, 0.0, 1, checkpoint_file, 10, false, 1e-6, 1e-8,
     )
 end

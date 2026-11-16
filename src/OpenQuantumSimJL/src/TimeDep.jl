@@ -106,6 +106,7 @@ function mesolve_time_dependent(
     atol::Real = 1e-10,
     save_states::Bool = false,
     compute_entropy::Bool = true,
+    ode_solver::AbstractString = "auto",
 )
     H0c = _as_complex_matrix(H0)
     rho0c = _as_complex_matrix(rho0)
@@ -137,64 +138,33 @@ function mesolve_time_dependent(
     rightbuf = similar(H0c)
     params = (H0c, h_terms, coeffs, collapse_ops, cdgc_ops, Hbuf, leftbuf, rightbuf, d)
 
+    local sol_u, report
     elapsed = @elapsed begin
-        if length(times) == 1
-            sol_u = [u0]
-            retcode = "Success"
-            nfev = 0
-        else
-            problem = ODEProblem(
-                _lindblad_rhs_time_dependent!,
-                u0,
-                (times[1], times[end]),
-                params,
-            )
-            sol = solve(
-                problem,
-                Tsit5();
-                saveat = times,
-                reltol = Float64(rtol),
-                abstol = Float64(atol),
-            )
-            sol_u = sol.u
-            retcode = string(sol.retcode)
-            nfev = 0
-        end
+        sol_u, report = _solve_ode_at_times(
+            _lindblad_rhs_time_dependent!,
+            u0,
+            times,
+            params;
+            rtol = rtol,
+            atol = atol,
+            ode_solver = ode_solver,
+        )
     end
 
-    n_times = length(times)
-    n_expect = length(expectation_ops)
-    expect_values = zeros(ComplexF64, n_expect, n_times)
-    entropy_values = compute_entropy ? zeros(Float64, n_times) : Float64[]
-    states = Array{ComplexF64}(undef, d, d, save_states ? n_times : 0)
-
-    for idx in 1:n_times
-        rho = reshape(sol_u[idx], d, d)
-        if compute_entropy
-            rho_h = Hermitian((rho .+ rho') ./ 2)
-            entropy_values[idx] = von_neumann_entropy(rho_h)
-        end
-        for op_idx in 1:n_expect
-            expect_values[op_idx, idx] = expect(expectation_ops[op_idx], rho)
-        end
-        if save_states
-            states[:, :, idx] .= rho
-        end
-    end
-
-    return (
-        times = times,
-        states = states,
-        expect = expect_values,
-        entropy = entropy_values,
-        solver_stats = (
-            nsteps = length(sol_u) - 1,
-            nfev = nfev,
-            wall_time = elapsed,
-            retcode = retcode,
-            method = "time-dependent-ode",
-            time_dependent = true,
-            compute_entropy = compute_entropy,
-        ),
+    collected = _collect_solution(
+        sol_u,
+        times,
+        d,
+        expectation_ops;
+        save_states = save_states,
+        compute_entropy = compute_entropy,
+        elapsed = elapsed,
+        report = report,
+        method_name = "time-dependent-ode",
+        requested_method = "time-dependent-ode",
+    )
+    return merge(
+        collected,
+        (solver_stats = merge(collected.solver_stats, (time_dependent = true,)),),
     )
 end

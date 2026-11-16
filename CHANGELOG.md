@@ -5,6 +5,73 @@ All notable changes to OpenQuantumSim will be documented here.
 The project follows semantic versioning once the public API reaches `0.1.0`.
 Until then, entries are grouped under alpha releases.
 
+## Unreleased
+
+Phase 1 of the roadmap, "trust the numbers": every solver result is either
+correct to the requested tolerance or arrives with an error or a warning.
+
+Changed behaviour (read before upgrading):
+
+- `mcsolve` and `single_trajectory` now use the waiting-time quantum-jump
+  algorithm on an adaptive integrator, with jump times located by
+  root-finding. Accuracy is set by `Options.rtol`/`atol` instead of a fixed
+  time step. `Options.max_step` now defaults to `None` and only caps the
+  adaptive step; it no longer has to be chosen for accuracy.
+- Trajectories draw from Julia's Xoshiro256++ generator, one independent
+  stream per trajectory derived from `Options.seed`. Results for a given seed
+  differ from earlier releases and no longer depend on `n_jobs` or the thread
+  count. `n_jobs` now limits the number of threads instead of meaning "one or
+  all". With `seed=None` the seed actually used is reported as
+  `solver_stats["base_seed"]`.
+- Monte Carlo checkpoints use format version 2 and are tied to the tolerances
+  and integrator as well as the system. Checkpoints written by earlier
+  releases are refused with an explanatory error instead of being resumed.
+- Solvers no longer return a result silently when something went wrong. A
+  failed integration, an unconverged Krylov step or an unconverged GMRES
+  solve raises `SolverError` or `ConvergenceError`; use
+  `Options(strict=False)` to get a `SolverHealthWarning` and the partial
+  result (values after the failure are NaN) instead.
+- `steadystate` defaults to `method="auto"` (direct sparse solve up to
+  Hilbert dimension 128, GMRES above) instead of always using GMRES.
+- A missing Julia backend raises `JuliaBridgeUnavailable`. It still derives
+  from `NotImplementedError`, so existing `except` clauses keep working.
+- `Options` validates its fields on construction. `Options.ode_solver` is now
+  honoured (`"tsit5"`, `"vern7"`, `"vern9"`); `Options(backend="gpu")` raises
+  `NotImplementedError` instead of being ignored.
+
+Added:
+
+- Exception and warning types in `openquantumsim.errors`:
+  `OpenQuantumSimError`, `BackendError` (wraps Julia exceptions and keeps the
+  Julia type name), `JuliaBridgeUnavailable`, `SolverError`,
+  `ConvergenceError`, and `SolverHealthWarning`.
+- Health statistics in `Result.solver_stats`: integrator return code, step
+  and rejection counts, Krylov residuals, and the drift of the trace,
+  Hermiticity and smallest eigenvalue of the density matrix. Drift beyond
+  the requested accuracy emits a `SolverHealthWarning`.
+- `steadystate(..., return_stats=True)` returns the convergence flag and the
+  residual `|L rho| / |L|` next to the state.
+- A validation suite of textbook problems with known answers in
+  `openquantumsim.validation`, run with `oqs validate` (writes a Markdown and
+  JSON report) and by `tests/physics/test_validation_suite.py`.
+- `scripts/sync_julia_backend.py` to copy the development Julia backend into
+  the packaged mirror, with `--check` for CI.
+- Time grids are typed to accept NumPy arrays as well as sequences.
+
+Known gaps:
+
+- The Monte Carlo timings in the README and the performance page were
+  measured with the old fixed-step stepper and have not been re-measured.
+- Example and benchmark scripts still pass `--max-step`, which now only caps
+  the adaptive step and can make trajectories slower than necessary.
+
+Continuous integration:
+
+- The physics job installs QuTiP and fails, instead of skipping, when QuTiP
+  or the Julia backend is missing, so the reference cross-checks always run.
+- Test coverage is measured and the validation report is attached to each
+  run. Python 3.13 and Julia 1.10, 1.11 and latest are tested.
+
 ## 0.1.0a6 - 2026-09-30
 
 - Added `brmesolve`, a secular Bloch-Redfield master-equation solver backed

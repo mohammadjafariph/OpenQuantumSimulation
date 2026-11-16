@@ -12,7 +12,8 @@ from numpy.typing import NDArray
 from scipy import sparse as sp  # type: ignore[import-untyped]
 from scipy.linalg import expm as _dense_expm  # type: ignore[import-untyped]
 
-from ._julia_bridge import JuliaBridgeUnavailable, load_backend
+from ._health import check_solver_health
+from ._julia_bridge import call_backend, require_backend
 from .observables import (
     StateObservable,
     _state_observable_spec,
@@ -24,6 +25,10 @@ from .timedep import InterpolatedCoefficient, TimeDependentHamiltonian
 
 Array = NDArray[np.complex128]
 FloatArray = NDArray[np.float64]
+# Time grids may be given as any sequence of floats or as a NumPy array of
+# any float precision. Older NumPy stubs type ``np.linspace`` as a generic
+# floating array, not ``float64``, so the alias must not name a precision.
+TimeGrid = Sequence[float] | NDArray[np.floating[Any]]
 
 
 @dataclass(frozen=True)
@@ -42,7 +47,7 @@ class _MCStateObservablePlan:
 def mesolve(
     H: Operator | TimeDependentHamiltonian,
     rho0: Array,
-    tlist: Sequence[float],
+    tlist: TimeGrid,
     *,
     c_ops: Sequence[Operator] | None = None,
     e_ops: Sequence[Operator] | None = None,
@@ -63,15 +68,18 @@ def mesolve(
     needs_states = bool(opts.save_states or state_observables)
 
     _validate_mesolve_inputs(H, rho0_array, times, c_arrays, e_arrays)
+    if isinstance(H, TimeDependentHamiltonian) and opts.method == "krylov":
+        msg = (
+            "method='krylov' is not available for time-dependent Hamiltonians; "
+            "use method='ode'."
+        )
+        raise ValueError(msg)
 
-    try:
-        backend = load_backend()
-    except JuliaBridgeUnavailable as exc:
-        msg = "mesolve requires the Julia backend; run `oqs setup-julia` first."
-        raise NotImplementedError(msg) from exc
+    backend = require_backend("mesolve")
 
     if isinstance(H, TimeDependentHamiltonian):
-        raw = backend.mesolve_time_dependent(
+        raw = call_backend(
+            backend.mesolve_time_dependent,
             _matrix_payload(backend, H_data),
             [
                 _matrix_payload(
@@ -89,9 +97,11 @@ def mesolve(
             float(opts.atol),
             needs_states,
             bool(opts.compute_entropy),
+            str(opts.ode_solver),
         )
     else:
-        raw = backend.mesolve(
+        raw = call_backend(
+            backend.mesolve,
             _matrix_payload(backend, H_data),
             rho0_array,
             times,
@@ -103,6 +113,7 @@ def mesolve(
             str(opts.method),
             int(opts.krylov_dim),
             bool(opts.compute_entropy),
+            str(opts.ode_solver),
         )
 
     raw_times = np.asarray(_field(raw, "times"), dtype=np.float64)
@@ -114,6 +125,7 @@ def mesolve(
     )
     raw_states = np.asarray(_field(raw, "states"), dtype=np.complex128)
     stats = _to_python_dict(_field(raw, "solver_stats"))
+    check_solver_health("mesolve", stats, rtol=opts.rtol, strict=opts.strict)
 
     expects = [raw_expect[idx, :].copy() for idx in range(raw_expect.shape[0])]
     state_series = _density_states(raw_states, len(raw_times)) if needs_states else []
@@ -141,7 +153,7 @@ def mesolve(
 def mcsolve(
     H: Operator,
     psi0: Array,
-    tlist: Sequence[float],
+    tlist: TimeGrid,
     *,
     c_ops: Sequence[Operator] | None = None,
     e_ops: Sequence[Operator] | None = None,
@@ -150,6 +162,14 @@ def mcsolve(
     options: Options | None = None,
 ) -> Result:
     """Run Monte Carlo wave-function trajectories.
+
+    Each trajectory uses the waiting-time algorithm: the state evolves under
+    the non-Hermitian effective Hamiltonian with an adaptive integrator, and
+    a quantum jump is applied at the instant the squared norm reaches a
+    uniformly drawn threshold. Accuracy is controlled by ``Options.rtol`` and
+    ``Options.atol``; statistical error is reported in ``expect_stderr``.
+    Every trajectory has its own Xoshiro random stream derived from
+    ``Options.seed``, so results do not depend on ``n_jobs``.
 
     Built-in ``state_observables`` created by :func:`openquantumsim.state_metrics`
     are aggregated by the backend when they can be represented as linear
@@ -177,18 +197,13 @@ def mcsolve(
         c_arrays,
         backend_e_arrays,
         trajectory_count,
-        opts.max_step,
-        opts.n_jobs,
-        opts.checkpoint_every,
     )
+    _reject_krylov_for_trajectories("mcsolve", opts)
 
-    try:
-        backend = load_backend()
-    except JuliaBridgeUnavailable as exc:
-        msg = "mcsolve requires the Julia backend; run `oqs setup-julia` first."
-        raise NotImplementedError(msg) from exc
+    backend = require_backend("mcsolve")
 
-    raw = backend.mcsolve(
+    raw = call_backend(
+        backend.mcsolve,
         _matrix_payload(backend, H.data),
         psi0_array,
         times,
@@ -196,11 +211,14 @@ def mcsolve(
         [_matrix_payload(backend, array) for array in backend_e_arrays],
         trajectory_count,
         seed,
-        float(opts.max_step),
+        _max_step_payload(opts),
         int(opts.n_jobs),
         "" if opts.checkpoint_file is None else str(opts.checkpoint_file),
         int(opts.checkpoint_every),
         bool(opts.progress),
+        float(opts.rtol),
+        float(opts.atol),
+        str(opts.ode_solver),
     )
 
     raw_times = np.asarray(_field(raw, "times"), dtype=np.float64)
@@ -209,6 +227,8 @@ def mcsolve(
     raw_expect_stderr = np.asarray(_field(raw, "expect_stderr"), dtype=np.float64)
     raw_entropy = np.asarray(_field(raw, "entropy"), dtype=np.float64)
     stats = _to_python_dict(_field(raw, "solver_stats"))
+    stats["seed"] = opts.seed
+    check_solver_health("mcsolve", stats, rtol=opts.rtol, strict=opts.strict)
     n_user_e_ops = len(e_arrays)
     expects = [raw_expect[idx, :].copy() for idx in range(n_user_e_ops)]
     expect_std = [
@@ -246,7 +266,7 @@ def mcsolve(
 def single_trajectory(
     H: Operator,
     psi0: Array,
-    tlist: Sequence[float],
+    tlist: TimeGrid,
     *,
     c_ops: Sequence[Operator] | None = None,
     e_ops: Sequence[Operator] | None = None,
@@ -265,41 +285,33 @@ def single_trajectory(
     seed = 0 if opts.seed is None else int(opts.seed)
     needs_states = bool(opts.save_states or state_observables)
 
-    _validate_mcsolve_inputs(
-        H,
-        psi0_array,
-        times,
-        c_arrays,
-        e_arrays,
-        1,
-        opts.max_step,
-        1,
-        1,
-    )
+    _validate_mcsolve_inputs(H, psi0_array, times, c_arrays, e_arrays, 1)
+    _reject_krylov_for_trajectories("single_trajectory", opts)
 
-    try:
-        backend = load_backend()
-    except JuliaBridgeUnavailable as exc:
-        msg = (
-            "single_trajectory requires the Julia backend; "
-            "run `oqs setup-julia` first."
-        )
-        raise NotImplementedError(msg) from exc
+    backend = require_backend("single_trajectory")
 
-    raw = backend.single_trajectory(
+    raw = call_backend(
+        backend.single_trajectory,
         _matrix_payload(backend, H.data),
         psi0_array,
         times,
         [_matrix_payload(backend, array) for array in c_arrays],
         [_matrix_payload(backend, array) for array in e_arrays],
         seed,
-        float(opts.max_step),
+        _max_step_payload(opts),
         needs_states,
+        float(opts.rtol),
+        float(opts.atol),
+        str(opts.ode_solver),
     )
 
     raw_times = np.asarray(_field(raw, "times"), dtype=np.float64)
     raw_expect = np.asarray(_field(raw, "expect"), dtype=np.complex128)
     raw_states = np.asarray(_field(raw, "states"), dtype=np.complex128)
+    stats = _to_python_dict(_field(raw, "solver_stats"))
+    stats["seed"] = opts.seed
+    stats["save_states"] = bool(opts.save_states)
+    check_solver_health("single_trajectory", stats, rtol=opts.rtol, strict=opts.strict)
 
     expects = [raw_expect[idx, :].copy() for idx in range(raw_expect.shape[0])]
     state_series = _ket_states(raw_states, len(raw_times)) if needs_states else []
@@ -318,15 +330,7 @@ def single_trajectory(
         expect_stderr=[],
         state_observables=observed,
         entropy=np.zeros_like(raw_times),
-        solver_stats={
-            "nsteps": max(len(raw_times) - 1, 0),
-            "retcode": "Success",
-            "n_traj": 1,
-            "max_step": float(opts.max_step),
-            "seed": seed,
-            "save_states": bool(opts.save_states),
-            "state_observables": list(observed),
-        },
+        solver_stats={**stats, "state_observables": list(observed)},
     )
 
 
@@ -334,10 +338,26 @@ def steadystate(
     H: Operator,
     c_ops: Sequence[Operator],
     *,
-    method: str = "iterative-gmres",
+    method: str = "auto",
     options: Options | None = None,
-) -> Array:
-    """Compute a Lindblad steady state."""
+    return_stats: bool = False,
+) -> Array | tuple[Array, dict[str, object]]:
+    """Compute a Lindblad steady state.
+
+    ``method`` is ``"auto"`` (default), ``"direct"`` (sparse LU) or
+    ``"iterative-gmres"``. ``"auto"`` uses the direct solve for Hilbert
+    dimensions up to 128 and GMRES above that. GMRES is not preconditioned
+    and can stagnate on larger or strongly driven systems.
+
+    The solve is checked before it is returned: a GMRES run that did not
+    converge raises :class:`~openquantumsim.errors.ConvergenceError`, and a
+    state whose residual ``|L rho| / |L|`` is large triggers a
+    :class:`~openquantumsim.errors.SolverHealthWarning`.
+
+    With ``return_stats=True`` the function returns ``(rho, stats)`` where
+    ``stats`` holds ``converged``, ``residual``, ``relative_residual``,
+    ``min_eigenvalue`` and timing information.
+    """
     opts = options or Options()
     c_arrays = [op.data for op in c_ops]
     if H.shape[0] != H.shape[1]:
@@ -347,19 +367,21 @@ def steadystate(
         if op.shape != H.shape:
             msg = "collapse operators must have the same shape as H."
             raise ValueError(msg)
-    try:
-        backend = load_backend()
-    except JuliaBridgeUnavailable as exc:
-        msg = "steadystate requires the Julia backend; run `oqs setup-julia` first."
-        raise NotImplementedError(msg) from exc
-    raw = backend.steadystate(
+    backend = require_backend("steadystate")
+    raw = call_backend(
+        backend.steadystate_info,
         _matrix_payload(backend, H.data),
         [_matrix_payload(backend, array) for array in c_arrays],
         method=str(method),
         rtol=float(opts.rtol),
         krylov_dim=int(opts.krylov_dim),
     )
-    return np.asarray(raw, dtype=np.complex128)
+    stats = _to_python_dict(_field(raw, "solver_stats"))
+    check_solver_health("steadystate", stats, rtol=opts.rtol, strict=opts.strict)
+    rho = np.asarray(_field(raw, "rho"), dtype=np.complex128)
+    if return_stats:
+        return rho, stats
+    return rho
 
 
 def lindblad_superoperator(
@@ -403,7 +425,7 @@ def apply_superoperator(superoperator: Array, rho: Array) -> Array:
 def brmesolve(
     H: Operator,
     rho0: Array,
-    tlist: Sequence[float],
+    tlist: TimeGrid,
     *,
     a_ops: Sequence[tuple[Operator, Callable[[float], float]]],
     e_ops: Sequence[Operator] | None = None,
@@ -432,13 +454,10 @@ def brmesolve(
 
     _validate_mesolve_inputs(H, rho0_array, times, a_arrays, e_arrays)
 
-    try:
-        backend = load_backend()
-    except JuliaBridgeUnavailable as exc:
-        msg = "brmesolve requires the Julia backend; run `oqs setup-julia` first."
-        raise NotImplementedError(msg) from exc
+    backend = require_backend("brmesolve")
 
-    raw = backend.brmesolve(
+    raw = call_backend(
+        backend.brmesolve,
         _matrix_payload(backend, H.data),
         rho0_array,
         times,
@@ -451,6 +470,7 @@ def brmesolve(
         str(opts.method),
         int(opts.krylov_dim),
         bool(opts.compute_entropy),
+        str(opts.ode_solver),
     )
 
     raw_times = np.asarray(_field(raw, "times"), dtype=np.float64)
@@ -462,6 +482,7 @@ def brmesolve(
     )
     raw_states = np.asarray(_field(raw, "states"), dtype=np.complex128)
     stats = _to_python_dict(_field(raw, "solver_stats"))
+    check_solver_health("brmesolve", stats, rtol=opts.rtol, strict=opts.strict)
     needs_states = bool(opts.save_states)
 
     expects = [raw_expect[idx, :].copy() for idx in range(raw_expect.shape[0])]
@@ -481,7 +502,7 @@ def brmesolve(
 
 def propagator(
     H: Operator,
-    tlist: Sequence[float],
+    tlist: TimeGrid,
     *,
     c_ops: Sequence[Operator] | None = None,
 ) -> list[Operator]:
@@ -764,6 +785,20 @@ def _validate_state_observable_name(name: object) -> None:
         raise ValueError(msg)
 
 
+def _max_step_payload(options: Options) -> float:
+    """Encode ``max_step`` for the backend, where 0 means "no limit"."""
+    return 0.0 if options.max_step is None else float(options.max_step)
+
+
+def _reject_krylov_for_trajectories(solver: str, options: Options) -> None:
+    if options.method == "krylov":
+        msg = (
+            f"{solver} integrates trajectories with an adaptive ODE solver; "
+            "method='krylov' is not available. Use method='auto' or 'ode'."
+        )
+        raise ValueError(msg)
+
+
 def _validate_mcsolve_inputs(
     H: Operator,
     psi0: Array,
@@ -771,9 +806,6 @@ def _validate_mcsolve_inputs(
     c_ops: Sequence[Any],
     e_ops: Sequence[Any],
     n_traj: int,
-    max_step: float,
-    n_jobs: int,
-    checkpoint_every: int,
 ) -> None:
     if H.shape[0] != H.shape[1]:
         msg = "H must be square."
@@ -790,14 +822,8 @@ def _validate_mcsolve_inputs(
     if n_traj <= 0:
         msg = "n_traj must be positive."
         raise ValueError(msg)
-    if max_step <= 0:
-        msg = "max_step must be positive."
-        raise ValueError(msg)
-    if n_jobs != -1 and n_jobs <= 0:
-        msg = "n_jobs must be -1 or positive."
-        raise ValueError(msg)
-    if checkpoint_every <= 0:
-        msg = "checkpoint_every must be positive."
+    if not np.linalg.norm(psi0) > 0:
+        msg = "psi0 must have nonzero norm."
         raise ValueError(msg)
     for op in [*c_ops, *e_ops]:
         if op.shape != H.shape:
@@ -829,9 +855,27 @@ def _ket_states(raw_states: Array, n_times: int) -> list[Array]:
 _SOLVER_STAT_NAMES = (
     "nsteps",
     "nfev",
+    "nreject",
     "wall_time",
     "retcode",
+    "success",
+    "converged",
+    "ode_solver",
+    "krylov_converged",
+    "krylov_max_residual",
+    "trace_drift",
+    "hermiticity_drift",
+    "min_eigenvalue",
+    "positivity_samples",
+    "n_nonfinite_states",
+    "residual",
+    "relative_residual",
+    "linear_residual",
     "n_traj",
+    "n_failed_trajectories",
+    "n_jumps",
+    "base_seed",
+    "rng",
     "max_step",
     "n_jobs_requested",
     "n_workers",

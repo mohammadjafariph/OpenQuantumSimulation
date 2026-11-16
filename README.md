@@ -20,7 +20,7 @@ diagnostics in one package.
 - **Julia speed, Python ergonomics.** Propagation runs in the packaged
   `OpenQuantumSimJL` backend; arrays go in, named results come back.
 - **Validated, not just benchmarked.** Analytic limits and QuTiP reference
-  models are checked in CI on Linux and Windows.
+  models are checked in CI on Linux, macOS, and Windows.
 
 ## How It Fits Together
 
@@ -197,12 +197,19 @@ result = oqs.mcsolve(
     c_ops=[collapse],
     e_ops=[projector],
     n_traj=1000,
-    options=oqs.Options(seed=2026, max_step=0.01, progress=True),
+    options=oqs.Options(seed=2026, progress=True),
 )
 
 population_mean = result.expect[0].real
 population_stderr = result.expect_stderr[0].real
 ```
+
+Trajectories use the waiting-time quantum-jump algorithm: the state evolves
+under the effective non-Hermitian Hamiltonian with an adaptive integrator, and
+each jump is applied at the instant located by root-finding. Accuracy is set
+by `Options.rtol`/`atol`, so there is no time step to choose. Every trajectory
+has its own random stream derived from `seed`, so a run gives the same numbers
+on any number of threads.
 
 Long trajectory runs can checkpoint partial sums and resume from the same
 operators, seed, time grid, and solver options:
@@ -217,11 +224,27 @@ result = oqs.mcsolve(
     n_traj=20_000,
     options=oqs.Options(
         seed=2026,
-        max_step=0.01,
         checkpoint_file="runs/mcsolve_checkpoint.h5",
         checkpoint_every=100,
     ),
 )
+```
+
+## Solver Health
+
+A solver that could not produce a trustworthy answer says so instead of
+returning numbers. A failed integration, an unconverged Krylov step, or an
+unconverged steady-state solve raises `oqs.SolverError` or
+`oqs.ConvergenceError`. A result whose trace, Hermiticity, or positivity
+drifted beyond the requested accuracy emits an `oqs.SolverHealthWarning`.
+The measurements behind these checks are in `result.solver_stats`.
+
+```python
+result = oqs.mesolve(H, rho0, times, c_ops=[collapse])
+print(result.solver_stats["retcode"], result.solver_stats["trace_drift"])
+
+# Keep the partial result (NaN after the failure) instead of raising:
+partial = oqs.mesolve(H, rho0, times, options=oqs.Options(strict=False))
 ```
 
 ## Bloch-Redfield Dynamics
@@ -265,7 +288,7 @@ trajectory = oqs.single_trajectory(
     times,
     c_ops=[collapse],
     state_observables=metrics,
-    options=oqs.Options(seed=2026, max_step=0.01),
+    options=oqs.Options(seed=2026),
 )
 
 purity = trajectory.state_observables["purity"].real
@@ -316,11 +339,22 @@ statistics.
 
 ## Validation
 
-The validation suite includes analytic qubit decay and a damped
-Jaynes-Cummings comparison against QuTiP.
+The validation suite solves 25 textbook problems whose answers are known
+independently of this library (closed formulas, exactly solvable rate
+equations, and QuTiP) and reports how far each solver is from the known
+answer next to the tolerance it must meet:
 
 ```bash
 python -m pip install -e ".[validation]"
+oqs validate --output-dir validation-report
+```
+
+The command exits non-zero if any case misses its tolerance, and writes
+`validation_report.md` and `validation_report.json`. The same cases run in the
+test suite and in CI, where the report is attached to every run. The original
+standalone Jaynes-Cummings comparison is still available:
+
+```bash
 python scripts/validate_jaynes_cummings_qutip.py
 ```
 
@@ -372,7 +406,7 @@ The research idea, overall architecture and design, and the original seed
 Julia codes and scripts are the author's own work. Language models (LLMs)
 assisted with later improvements, optimizations, and porting; the author
 reviewed, tested, and validated the resulting code. The validation suite,
-benchmarks, and CI on Linux and Windows back this process.
+benchmarks, and CI on Linux, macOS, and Windows back this process.
 
 ## Citation
 

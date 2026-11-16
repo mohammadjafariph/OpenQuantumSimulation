@@ -93,9 +93,14 @@ Solver Statistics
 -----------------
 
 ``/solver_stats`` is a group whose attributes store solver metadata such as
-``retcode``, ``n_traj``, ``max_step``, ``wall_time``, checkpoint information, and
-backend options. Each key may have a paired ``<key>__encoding`` attribute with
-one of these values:
+``retcode``, ``success``, ``n_traj``, ``wall_time``, checkpoint information, and
+backend options. Health measurements are stored here too: step counts
+(``nsteps``, ``nfev``, ``nreject``), Krylov convergence
+(``krylov_converged``, ``krylov_max_residual``), density-matrix invariants
+(``trace_drift``, ``hermiticity_drift``, ``min_eigenvalue``), and for Monte
+Carlo runs ``n_jumps``, ``n_failed_trajectories``, ``base_seed`` and ``rng``.
+Each key may have a paired ``<key>__encoding`` attribute with one of these
+values:
 
 .. list-table::
    :header-rows: 1

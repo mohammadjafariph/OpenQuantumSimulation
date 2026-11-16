@@ -14,7 +14,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11", "3.12"]
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
         os: [ubuntu-latest, macos-latest, windows-latest]
 
     steps:
@@ -33,6 +33,9 @@ jobs:
       - name: Check publish-readiness file/package-data gate
         run: python scripts/check_publish_ready.py
 
+      - name: Check packaged Julia backend mirror
+        run: python scripts/sync_julia_backend.py --check
+
       - name: Lint
         run: python -m ruff check openquantumsim examples tests scripts benchmarks README.md setup_julia.py
 
@@ -43,16 +46,24 @@ jobs:
         run: python -m pytest tests -m "not physics and not integration and not slow"
 
   python-julia-integration:
-    name: Python-Julia physics tests (${{ matrix.os }})
+    name: Python-Julia physics tests (${{ matrix.os }}, py${{ matrix.python-version }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ["3.11"]
+        include:
+          - os: ubuntu-latest
+            python-version: "3.13"
     env:
       # juliapkg locates or downloads its own Julia; pointing it at the
       # system executable broke with juliapkg 0.1.27 on GitHub runners.
       PYTHON_JULIACALL_HANDLE_SIGNALS: yes
+      # A missing backend or a missing QuTiP must fail the job, not skip the
+      # physics tests and reference cross-checks (see tests/conftest.py).
+      OQS_REQUIRE_BACKEND: "1"
+      OQS_REQUIRE_QUTIP: "1"
 
     steps:
       - name: Check out repository
@@ -61,7 +72,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: "3.11"
+          python-version: ${{ matrix.python-version }}
           cache: pip
 
       - name: Set up Julia
@@ -72,18 +83,56 @@ jobs:
       - name: Cache Julia artifacts
         uses: julia-actions/cache@v2
 
-      - name: Install package and development dependencies
-        run: python -m pip install -e ".[dev]"
+      - name: Install package with development and validation dependencies
+        run: python -m pip install -e ".[dev,validation]"
 
       - name: Instantiate Julia backend
         run: python setup_julia.py
 
-      - name: Run Python physics tests
-        run: python -m pytest tests/physics -m "physics"
+      - name: Run the full test suite with coverage
+        run: >-
+          python -m pytest tests
+          --cov=openquantumsim
+          --cov-report=term-missing:skip-covered
+          --cov-report=xml:coverage.xml
+          -rs
+
+      - name: Generate validation report
+        run: python -m openquantumsim.cli validate --output-dir validation-report
+
+      - name: Add coverage and validation summaries to the job summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## Test coverage"
+            echo '```'
+            python -m coverage report --skip-covered || true
+            echo '```'
+            if [ -f validation-report/validation_report.md ]; then
+              cat validation-report/validation_report.md
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload coverage and validation report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: validation-${{ matrix.os }}-py${{ matrix.python-version }}
+          path: |
+            coverage.xml
+            validation-report/
+          if-no-files-found: warn
 
   julia-backend:
-    name: Julia backend tests
+    name: Julia backend tests (Julia ${{ matrix.julia-version }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 1.10 is the oldest supported release, 1.11 matches the committed
+        # Manifest, and "1" is the latest stable release.
+        julia-version: ["1.10", "1.11", "1"]
 
     steps:
       - name: Check out repository
@@ -92,10 +141,18 @@ jobs:
       - name: Set up Julia
         uses: julia-actions/setup-julia@v2
         with:
-          version: "1.10"
+          version: ${{ matrix.julia-version }}
 
       - name: Cache Julia artifacts
         uses: julia-actions/cache@v2
+
+      - name: Re-resolve dependencies for the latest Julia
+        if: ${{ matrix.julia-version == '1' }}
+        run: |
+          rm -f src/OpenQuantumSimJL/Manifest.toml
+          # A fresh runner has no package registry, and Pkg.resolve() does
+          # not install one, so add it explicitly first.
+          julia --project=src/OpenQuantumSimJL -e 'using Pkg; Pkg.Registry.add("General"); Pkg.resolve()'
 
       - name: Run Julia backend tests
         run: julia --project=src/OpenQuantumSimJL -e 'using Pkg; Pkg.test()'
@@ -142,15 +199,20 @@ jobs:
         run: |
           python -m pip install --no-deps --target /tmp/oqs-wheel-install dist/openquantumsim-*.whl
           python - <<'PY'
-          import importlib.util
+          import importlib
+          import sys
+          import types
           from pathlib import Path
 
-          module_path = Path("/tmp/oqs-wheel-install/openquantumsim/_julia_bridge.py")
-          spec = importlib.util.spec_from_file_location("oqs_julia_bridge", module_path)
-          if spec is None or spec.loader is None:
-              raise SystemExit(f"could not load {module_path}")
-          bridge = importlib.util.module_from_spec(spec)
-          spec.loader.exec_module(bridge)
+          # The wheel is installed without its dependencies, so importing
+          # the package itself would fail on NumPy. Register an empty
+          # stand-in package instead: the bridge and the modules it imports
+          # relatively (errors) only need the standard library.
+          package_dir = Path("/tmp/oqs-wheel-install/openquantumsim")
+          package = types.ModuleType("openquantumsim")
+          package.__path__ = [str(package_dir)]
+          sys.modules["openquantumsim"] = package
+          bridge = importlib.import_module("openquantumsim._julia_bridge")
 
           path = bridge.backend_path()
           assert str(path).startswith("/tmp/oqs-wheel-install/"), path

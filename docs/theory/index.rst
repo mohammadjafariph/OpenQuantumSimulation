@@ -32,13 +32,32 @@ and :func:`openquantumsim.apply_superoperator`.
 Monte Carlo Wave Function
 -------------------------
 
-``mcsolve`` samples the standard MCWF (quantum-jump) unraveling: between jumps
-the state evolves under the effective non-Hermitian Hamiltonian
-:math:`H_\text{eff} = H - \tfrac{i}{2}\sum_k C_k^\dagger C_k`, and jumps occur
-with probabilities determined by the collapse operators. Averaging over
-independent trajectories reproduces the Lindblad master equation in the limit
-of many trajectories; the reported standard error is the standard error of the
-mean over trajectories.
+``mcsolve`` samples the standard MCWF (quantum-jump) unraveling with the
+waiting-time algorithm. For each trajectory:
+
+1. Draw a threshold :math:`r` uniformly from :math:`[0, 1)`.
+2. Evolve the unnormalised state under the effective non-Hermitian Hamiltonian
+   :math:`H_\text{eff} = H - \tfrac{i}{2}\sum_k C_k^\dagger C_k`. Its squared
+   norm decays, and equals the probability that no jump has happened yet.
+3. At the instant :math:`\lVert\psi(t)\rVert^2 = r`, apply collapse operator
+   :math:`C_k` with probability proportional to
+   :math:`\lVert C_k \psi\rVert^2`, normalise, draw a new threshold, and
+   continue.
+
+The no-jump evolution uses an adaptive Runge-Kutta integrator, and the jump
+instant is located by root-finding on the integrator's interpolant. The
+accuracy of a trajectory is therefore set by ``Options.rtol`` and
+``Options.atol``; there is no time step to choose, and no bias when decay
+rates are fast compared with the output grid. ``Options.max_step`` only caps
+the adaptive step.
+
+Averaging over independent trajectories reproduces the Lindblad master
+equation in the limit of many trajectories; the reported standard error is the
+standard error of the mean over trajectories. Each trajectory draws from its
+own Xoshiro256++ stream, seeded from the SHA-256 digest of the run seed and
+the trajectory index. A run is therefore reproducible from ``Options.seed``
+alone, gives identical numbers on any number of threads, and continues with
+the same streams when resumed from a checkpoint.
 
 Bloch-Redfield Equation
 -----------------------

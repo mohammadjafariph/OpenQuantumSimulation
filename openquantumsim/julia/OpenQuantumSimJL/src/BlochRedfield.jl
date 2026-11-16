@@ -97,6 +97,7 @@ function brmesolve(
     method::AbstractString = "ode",
     krylov_dim::Integer = 30,
     compute_entropy::Bool = true,
+    ode_solver::AbstractString = "auto",
 )
     Hc = _as_complex_operator(H)
     rho0c = _as_complex_matrix(rho0)
@@ -108,12 +109,11 @@ function brmesolve(
         size(op) == (d, d) || throw(DimensionMismatch("expectation operators must match H."))
     end
 
-    requested_method = lowercase(String(method))
-    method_name = requested_method == "auto" ? "ode" : requested_method
+    requested_method, method_name, ode_solver_name = _resolve_method(method, ode_solver)
 
     L = br_liouvillian(Hc, a_ops, spectra)
     u0 = vec(copy(rho0c))
-    sol_u, retcode, elapsed = _solve_liouvillian(
+    sol_u, report, elapsed = _solve_liouvillian(
         L,
         u0,
         times;
@@ -121,6 +121,7 @@ function brmesolve(
         atol = Float64(atol),
         method_name = method_name,
         krylov_dim = Int(krylov_dim),
+        ode_solver = ode_solver_name,
     )
 
     return _collect_solution(
@@ -131,7 +132,7 @@ function brmesolve(
         save_states = save_states,
         compute_entropy = compute_entropy,
         elapsed = elapsed,
-        retcode = retcode,
+        report = report,
         method_name = method_name,
         requested_method = requested_method,
         krylov_dim = Int(krylov_dim),

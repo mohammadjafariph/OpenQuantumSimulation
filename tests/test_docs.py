@@ -7,6 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_docs_api_pages_exist() -> None:
     api_pages = [
         "correlations",
+        "errors",
         "hilbert",
         "observables",
         "operators",
@@ -17,6 +18,7 @@ def test_docs_api_pages_exist() -> None:
         "sweeps",
         "systems",
         "timedep",
+        "validation",
     ]
 
     for page in api_pages:

@@ -18,45 +18,54 @@ function _propagate_liouville_from_zero(
     atol::Real = 1e-10,
     method::AbstractString = "krylov",
     krylov_dim::Integer = 30,
+    ode_solver::AbstractString = "auto",
 )
     method_name = lowercase(String(method))
 
     if method_name in ("krylov", "auto")
-        sol_u = Vector{Vector{ComplexF64}}(undef, length(times))
-        current = copy(u0)
-        current_time = 0.0
-        for idx in eachindex(times)
-            dt = times[idx] - current_time
-            if dt != 0
-                current = krylov_expmv(
-                    L,
-                    dt,
-                    current;
-                    krylov_dim = krylov_dim,
-                    tol = max(Float64(rtol), Float64(atol)),
-                )
-            end
-            sol_u[idx] = copy(current)
-            current_time = times[idx]
-        end
-        return sol_u, "Success"
-    elseif method_name in ("ode", "tsit5")
-        if times[end] == 0
-            return [copy(u0) for _ in times], "Success"
-        end
-        rhs!(du, u, _p, _t) = (mul!(du, L, u); nothing)
-        problem = ODEProblem(rhs!, u0, (0.0, times[end]))
-        sol = solve(
-            problem,
-            Tsit5();
-            saveat = times,
-            reltol = Float64(rtol),
-            abstol = Float64(atol),
+        return _solve_krylov_at_times(
+            L,
+            u0,
+            times,
+            0.0;
+            tol = max(Float64(rtol), Float64(atol)),
+            krylov_dim = krylov_dim,
         )
-        return Vector{Vector{ComplexF64}}(sol.u), string(sol.retcode)
+    elseif method_name in ("ode", "tsit5")
+        # Integrate from tau = 0 even when the first requested delay is later.
+        grid = times[1] == 0 ? times : vcat(0.0, times)
+        states, report = _solve_ode_at_times(
+            _linear_rhs!,
+            u0,
+            grid,
+            L;
+            rtol = rtol,
+            atol = atol,
+            ode_solver = method_name == "tsit5" ? "tsit5" : ode_solver,
+        )
+        return (times[1] == 0 ? states : states[2:end]), report
     end
 
     throw(ArgumentError("unknown correlation propagation method: $(method)"))
+end
+
+function _correlation_stats(reports, elapsed::Real, nsteps::Integer, method, krylov_dim)
+    failed = [report.retcode for report in reports if !report.success]
+    return (
+        nsteps = Int(nsteps),
+        nfev = sum(report.nfev for report in reports; init = 0),
+        wall_time = elapsed,
+        retcode = isempty(failed) ? SUCCESS_RETCODE : join(unique(failed), ","),
+        success = isempty(failed),
+        method = lowercase(String(method)),
+        krylov_dim = Int(krylov_dim),
+        krylov_converged = all(report.krylov_converged for report in reports),
+        krylov_max_residual = maximum(
+            report.krylov_max_residual for report in reports;
+            init = 0.0,
+        ),
+        quantum_regression = true,
+    )
 end
 
 function correlation_2op_1t(
@@ -70,6 +79,7 @@ function correlation_2op_1t(
     atol::Real = 1e-10,
     method::AbstractString = "krylov",
     krylov_dim::Integer = 30,
+    ode_solver::AbstractString = "auto",
 )
     Hc = _as_complex_matrix(H)
     rho0c = _as_complex_matrix(rho0)
@@ -89,8 +99,9 @@ function correlation_2op_1t(
 
     L = liouvillian(Hc, collapse_ops)
     u0 = vec(Bc * rho0c)
+    local sol_u, report
     elapsed = @elapsed begin
-        sol_u, retcode = _propagate_liouville_from_zero(
+        sol_u, report = _propagate_liouville_from_zero(
             L,
             u0,
             taus;
@@ -98,6 +109,7 @@ function correlation_2op_1t(
             atol = atol,
             method = method,
             krylov_dim = krylov_dim,
+            ode_solver = ode_solver,
         )
     end
 
@@ -109,15 +121,7 @@ function correlation_2op_1t(
     return (
         taulist = taus,
         correlations = values,
-        solver_stats = (
-            nsteps = length(taus),
-            nfev = 0,
-            wall_time = elapsed,
-            retcode = retcode,
-            method = lowercase(String(method)),
-            krylov_dim = Int(krylov_dim),
-            quantum_regression = true,
-        ),
+        solver_stats = _correlation_stats([report], elapsed, length(taus), method, krylov_dim),
     )
 end
 
@@ -133,6 +137,7 @@ function correlation_2op_2t(
     atol::Real = 1e-10,
     method::AbstractString = "krylov",
     krylov_dim::Integer = 30,
+    ode_solver::AbstractString = "auto",
 )
     Hc = _as_complex_matrix(H)
     rho0c = _as_complex_matrix(rho0)
@@ -152,6 +157,8 @@ function correlation_2op_2t(
     end
 
     L = liouvillian(Hc, collapse_ops)
+    values = zeros(ComplexF64, length(times), length(taus))
+    reports = []
     elapsed = @elapsed begin
         state_result = mesolve(
             Hc,
@@ -164,14 +171,22 @@ function correlation_2op_2t(
             true,
             method,
             krylov_dim,
+            false,
+            ode_solver,
         )
+        stats = state_result.solver_stats
+        push!(reports, (
+            retcode = stats.retcode,
+            success = stats.success,
+            nfev = stats.nfev,
+            krylov_converged = stats.krylov_converged,
+            krylov_max_residual = stats.krylov_max_residual,
+        ))
 
-        values = zeros(ComplexF64, length(times), length(taus))
-        retcodes = String[state_result.solver_stats.retcode]
         for tidx in eachindex(times)
             rho_t = state_result.states[:, :, tidx]
             u0 = vec(Bc * rho_t)
-            sol_u, retcode = _propagate_liouville_from_zero(
+            sol_u, report = _propagate_liouville_from_zero(
                 L,
                 u0,
                 taus;
@@ -179,27 +194,25 @@ function correlation_2op_2t(
                 atol = atol,
                 method = method,
                 krylov_dim = krylov_dim,
+                ode_solver = ode_solver,
             )
-            push!(retcodes, retcode)
+            push!(reports, report)
             for tauidx in eachindex(taus)
                 values[tidx, tauidx] = tr(Ac * reshape(sol_u[tauidx], d, d))
             end
         end
     end
 
-    success = all(retcode == "Success" for retcode in retcodes)
     return (
         tlist = times,
         taulist = taus,
         correlations = values,
-        solver_stats = (
-            nsteps = length(times) * length(taus),
-            nfev = 0,
-            wall_time = elapsed,
-            retcode = success ? "Success" : join(retcodes, ","),
-            method = lowercase(String(method)),
-            krylov_dim = Int(krylov_dim),
-            quantum_regression = true,
+        solver_stats = _correlation_stats(
+            reports,
+            elapsed,
+            length(times) * length(taus),
+            method,
+            krylov_dim,
         ),
     )
 end

@@ -270,6 +270,14 @@ Command:
 Monte Carlo Wave Functions: OpenQuantumSim vs QuTiP
 ---------------------------------------------------
 
+.. note::
+
+   The numbers in this section were measured with the fixed-step trajectory
+   stepper used up to ``0.1.0a6``. Later releases use the waiting-time
+   algorithm on an adaptive integrator, where ``--max-step`` only caps the
+   step size. These timings have not been re-measured with the new stepper
+   and should not be quoted for it.
+
 Command:
 
 .. code-block:: bash

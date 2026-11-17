@@ -570,8 +570,32 @@ end
     @test stats.trace_drift < 1e-10
     @test stats.hermiticity_drift < 1e-10
     @test stats.min_eigenvalue > -1e-10
-    @test stats.positivity_samples == length(times)
+    @test stats.positivity_samples == OpenQuantumSimJL.POSITIVITY_SAMPLES_SMALL
     @test stats.n_nonfinite_states == 0
+end
+
+@testset "solver health: positivity spot check is bounded and includes the ends" begin
+    sample = OpenQuantumSimJL._positivity_sample_indices
+    small = OpenQuantumSimJL.POSITIVITY_SAMPLES_SMALL
+    large = OpenQuantumSimJL.POSITIVITY_SAMPLES_LARGE
+
+    @test sample(3, 2) == [1, 2, 3]
+    @test length(sample(81, 2)) == small
+    @test length(sample(81, 200)) == large
+    for (n_times, d) in ((81, 2), (81, 200), (1000, 10))
+        indices = sample(n_times, d)
+        @test first(indices) == 1
+        @test last(indices) == n_times
+        @test issorted(indices) && allunique(indices)
+    end
+
+    # A negative eigenvalue at the final time is always caught.
+    d = 2
+    good = vec(ComplexF64[1 0; 0 0])
+    bad = vec(ComplexF64[1.2 0; 0 -0.2])
+    states = [good for _ in 1:50]
+    push!(states, bad)
+    @test OpenQuantumSimJL._density_health(states, d).min_eigenvalue ≈ -0.2
 end
 
 @testset "solver health: integrator failure is reported, not hidden" begin
@@ -734,8 +758,11 @@ end
     @test abs(sum(abs2, draws) / length(draws) - 1 / 3) < 0.01
 
     @test OpenQuantumSimJL._resolve_base_seed(42) == UInt64(42)
-    @test OpenQuantumSimJL._resolve_base_seed(0) != OpenQuantumSimJL._resolve_base_seed(0)
-    @test_throws ArgumentError OpenQuantumSimJL._resolve_base_seed(-1)
+    # 0 is an ordinary seed; only -1 asks for a fresh one.
+    @test OpenQuantumSimJL._resolve_base_seed(0) == UInt64(0)
+    fresh = OpenQuantumSimJL.FRESH_SEED
+    @test OpenQuantumSimJL._resolve_base_seed(fresh) != OpenQuantumSimJL._resolve_base_seed(fresh)
+    @test_throws ArgumentError OpenQuantumSimJL._resolve_base_seed(-2)
 end
 
 @testset "mcsolve refuses checkpoints from the old generator" begin

@@ -22,7 +22,8 @@ Changed behaviour (read before upgrading):
   differ from earlier releases and no longer depend on `n_jobs` or the thread
   count. `n_jobs` now limits the number of threads instead of meaning "one or
   all". With `seed=None` the seed actually used is reported as
-  `solver_stats["base_seed"]`.
+  `solver_stats["base_seed"]`. Every explicit seed is reproducible:
+  `Options(seed=0)` used to draw a fresh random seed and now means seed 0.
 - Monte Carlo checkpoints use format version 2 and are tied to the tolerances
   and integrator as well as the system. Checkpoints written by earlier
   releases are refused with an explanatory error instead of being resumed.
@@ -48,7 +49,11 @@ Added:
 - Health statistics in `Result.solver_stats`: integrator return code, step
   and rejection counts, Krylov residuals, and the drift of the trace,
   Hermiticity and smallest eigenvalue of the density matrix. Drift beyond
-  the requested accuracy emits a `SolverHealthWarning`.
+  the requested accuracy emits a `SolverHealthWarning`. Trace and
+  Hermiticity are checked at every output time; positivity needs an
+  eigenvalue decomposition and is spot-checked at up to 8 evenly spaced
+  times (4 above Hilbert dimension 64), always including the last. The
+  checks cost 10-20% of a small `mesolve`.
 - `steadystate(..., return_stats=True)` returns the convergence flag and the
   residual `|L rho| / |L|` next to the state.
 - A validation suite of textbook problems with known answers in
@@ -58,12 +63,25 @@ Added:
   the packaged mirror, with `--check` for CI.
 - Time grids are typed to accept NumPy arrays as well as sequences.
 
-Known gaps:
+Fixed:
 
-- The Monte Carlo timings in the README and the performance page were
-  measured with the old fixed-step stepper and have not been re-measured.
-- Example and benchmark scripts still pass `--max-step`, which now only caps
-  the adaptive step and can make trajectories slower than necessary.
+- `ParameterSweep` crashed while writing `summary.h5` when a summary column
+  had a value for some points and not others, or mixed numbers and text.
+  Missing numbers are now written as NaN and mixed columns as text.
+
+Scripts and benchmarks:
+
+- `--max-step` is optional in every example, benchmark and helper script and
+  defaults to no cap.
+- `examples/dicke/run_mi_distribution.py` records the trajectory algorithm in
+  its output and refuses to resume a file written by the old fixed-step
+  stepper, so samples from the two algorithms are never mixed.
+- `benchmarks/bench_mcsolve_vs_qutip.py` runs both libraries at the same
+  tolerances, times OpenQuantumSim on one thread and on all threads, checks
+  both against the exact answer, and records the environment.
+- The README and the performance page report new measurements for the
+  current code on an AMD Ryzen 5 5600X; the Apple M1 numbers are kept as a
+  historical snapshot.
 
 Continuous integration:
 

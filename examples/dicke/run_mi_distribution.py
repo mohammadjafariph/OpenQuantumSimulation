@@ -23,6 +23,10 @@ from examples.dicke.system import two_ensemble_dicke_system  # noqa: E402
 
 FloatArray = np.ndarray[Any, np.dtype[np.float64]]
 
+# Stored in every output file. Resuming a file written by another trajectory
+# algorithm would mix incomparable samples, so it is refused.
+TRAJECTORY_ALGORITHM = "waiting-time, xoshiro256++/sha256-stream-v1"
+
 
 @dataclass(frozen=True)
 class BatchRequest:
@@ -31,7 +35,7 @@ class BatchRequest:
     n_spins: int
     kappa: float
     times: FloatArray
-    max_step: float
+    max_step: float | None
     seed: int
     point_index: int
     start: int
@@ -106,7 +110,12 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--n-traj", type=int, default=100)
     parser.add_argument("--time-points", type=int, default=201)
     parser.add_argument("--t-final", type=float, default=20.0)
-    parser.add_argument("--max-step", type=float, default=0.01)
+    parser.add_argument(
+        "--max-step",
+        type=float,
+        default=None,
+        help="Optional cap on the adaptive integrator step (default: no cap).",
+    )
     parser.add_argument("--checkpoint-every", type=int, default=10)
     parser.add_argument(
         "--batch-size",
@@ -143,7 +152,7 @@ def _parse_args() -> argparse.Namespace:
         parser.error("--time-points must be greater than 1")
     if args.t_final <= 0:
         parser.error("--t-final must be positive")
-    if args.max_step <= 0:
+    if args.max_step is not None and args.max_step <= 0:
         parser.error("--max-step must be positive")
     if args.checkpoint_every <= 0:
         parser.error("--checkpoint-every must be positive")
@@ -201,7 +210,16 @@ def _prepare_output(
     if handle.attrs.get("format") != "openquantumsim.dicke_mi_distribution":
         msg = "Output file is not an OpenQuantumSim Dicke MI distribution file."
         raise ValueError(msg)
-    if json.loads(str(handle.attrs["config_json"])) != config:
+    stored = json.loads(str(handle.attrs["config_json"]))
+    if stored.get("trajectory_algorithm") != TRAJECTORY_ALGORITHM:
+        msg = (
+            "Existing output was written with a different trajectory algorithm "
+            f"({stored.get('trajectory_algorithm', 'fixed-step, before 0.1.0')!r}); "
+            "new trajectories would not be comparable with the stored ones. "
+            "Use --restart or choose a new --output."
+        )
+        raise ValueError(msg)
+    if stored != config:
         msg = "Existing output config does not match this run. Use --restart."
         raise ValueError(msg)
     if not np.allclose(np.asarray(handle["t_axis"]), times):
@@ -217,6 +235,7 @@ def _config(args: argparse.Namespace) -> dict[str, Any]:
         "time_points": args.time_points,
         "t_final": args.t_final,
         "max_step": args.max_step,
+        "trajectory_algorithm": TRAJECTORY_ALGORITHM,
         "checkpoint_every": args.checkpoint_every,
         "steady_start_frac": args.steady_start_frac,
         "seed": args.seed,
@@ -248,7 +267,8 @@ def _require_point_group(
     group.attrs["n_traj"] = args.n_traj
     group.attrs["time_points"] = len(times)
     group.attrs["t_final"] = float(times[-1])
-    group.attrs["max_step"] = args.max_step
+    # HDF5 attributes cannot hold None; 0 means "no cap", as in the backend.
+    group.attrs["max_step"] = 0.0 if args.max_step is None else args.max_step
     group.attrs["steady_start_frac"] = args.steady_start_frac
     group.attrs["n_transient"] = n_transient
     if "completed" not in group.attrs:

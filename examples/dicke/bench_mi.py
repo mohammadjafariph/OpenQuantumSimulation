@@ -80,7 +80,12 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--n-traj", type=int, default=20)
     parser.add_argument("--time-points", type=int, default=101)
     parser.add_argument("--t-final", type=float, default=1.0)
-    parser.add_argument("--max-step", type=float, default=0.01)
+    parser.add_argument(
+        "--max-step",
+        type=float,
+        default=None,
+        help="Optional cap on the adaptive integrator step (default: no cap).",
+    )
     parser.add_argument("--batch-size", type=int, default=5)
     parser.add_argument("--repeats", type=int, default=3)
     parser.add_argument("--seed", type=int, default=2026)
@@ -116,7 +121,7 @@ def _parse_args() -> argparse.Namespace:
         parser.error("--time-points must be greater than 1")
     if args.t_final <= 0:
         parser.error("--t-final must be positive")
-    if args.max_step <= 0:
+    if args.max_step is not None and args.max_step <= 0:
         parser.error("--max-step must be positive")
     if args.batch_size <= 0:
         parser.error("--batch-size must be positive")

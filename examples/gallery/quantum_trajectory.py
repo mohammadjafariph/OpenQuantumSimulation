@@ -53,7 +53,7 @@ def run_example(
         c_ops=[collapse],
         e_ops=[projector],
         n_traj=n_traj,
-        options=oqs.Options(seed=2026, max_step=0.02, n_jobs=1),
+        options=oqs.Options(seed=2026, n_jobs=1),
     )
 
     population = result.expect[0].real

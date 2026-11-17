@@ -4,10 +4,13 @@
 
 const SUCCESS_RETCODE = "Success"
 
-# Above this dimension the smallest eigenvalue is sampled at a bounded number
-# of saved times instead of every one, so the check never dominates a solve.
-const POSITIVITY_FULL_CHECK_DIM = 64
-const POSITIVITY_MAX_SAMPLES = 32
+# Positivity needs an eigenvalue decomposition (O(d^3)) per checked state, which
+# costs more than the whole solve when done at every output time. It is
+# therefore a spot check at a few evenly spaced times, always including the
+# first and the last. Trace and Hermiticity are cheap and checked everywhere.
+const POSITIVITY_SMALL_DIM = 64
+const POSITIVITY_SAMPLES_SMALL = 8
+const POSITIVITY_SAMPLES_LARGE = 4
 
 function _ode_algorithm(name::AbstractString)
     key = lowercase(String(name))
@@ -99,7 +102,9 @@ function _solve_ode_at_times(
     for idx in 1:n_times
         save_idx = searchsortedfirst(save_times, times[idx])
         states[idx] = save_idx <= length(saved) ?
-            Vector{ComplexF64}(saved[save_idx]) :
+            # The integrator stores a separate copy per saved time, so the
+            # saved vector can be used without copying it again.
+            convert(Vector{ComplexF64}, saved[save_idx]) :
             _nan_state(length(u0))
     end
 
@@ -160,10 +165,9 @@ function _solve_krylov_at_times(
 end
 
 function _positivity_sample_indices(n_times::Int, d::Int)
-    if d <= POSITIVITY_FULL_CHECK_DIM || n_times <= POSITIVITY_MAX_SAMPLES
-        return collect(1:n_times)
-    end
-    return unique(round.(Int, range(1, n_times; length = POSITIVITY_MAX_SAMPLES)))
+    n_samples = d <= POSITIVITY_SMALL_DIM ? POSITIVITY_SAMPLES_SMALL : POSITIVITY_SAMPLES_LARGE
+    n_times <= n_samples && return collect(1:n_times)
+    return unique(round.(Int, range(1, n_times; length = n_samples)))
 end
 
 """
@@ -192,10 +196,13 @@ function _density_health(sol_u, d::Integer)
         all(isfinite, rho) || continue
         n_finite += 1
         trace_drift = max(trace_drift, abs(tr(rho) - reference_trace))
-        for col in 1:d, row in 1:col
-            deviation = abs(rho[row, col] - conj(rho[col, row]))
-            hermiticity_drift = max(hermiticity_drift, deviation)
+        # Compare squared magnitudes and take one square root at the end;
+        # abs() on every element pair would dominate the check.
+        worst = 0.0
+        @inbounds for col in 1:d, row in 1:col
+            worst = max(worst, abs2(rho[row, col] - conj(rho[col, row])))
         end
+        hermiticity_drift = max(hermiticity_drift, sqrt(worst))
     end
 
     samples = 0

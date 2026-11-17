@@ -93,6 +93,9 @@ branch = true
 
 [tool.coverage.report]
 show_missing = true
+# The full suite (CI physics job) is at about 97%; this floor stops coverage
+# from slipping back below the roadmap target unnoticed.
+fail_under = 90
 exclude_also = [
     "if TYPE_CHECKING:",
     "raise AssertionError",

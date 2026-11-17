@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import json
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -127,3 +128,66 @@ def test_run_point_writes_serial_batches(
         assert np.allclose(group["MI_time_A"][:, 0], [0.0, 1.0, 2.0])
         assert np.allclose(group["MI_time_B"][:, 0], [10.0, 11.0, 12.0])
         assert np.allclose(group["MI_steady_A"][:], [0.0, 1.0, 2.0])
+
+
+def _resume_args(**overrides: Any) -> argparse.Namespace:
+    settings: dict[str, Any] = {
+        "n_values": [2],
+        "kappa_values": [0.1],
+        "n_traj": 2,
+        "time_points": 4,
+        "t_final": 0.3,
+        "max_step": None,
+        "checkpoint_every": 1,
+        "batch_size": 0,
+        "n_jobs": 1,
+        "steady_start_frac": 0.5,
+        "seed": 2026,
+    }
+    settings.update(overrides)
+    return argparse.Namespace(**settings)
+
+
+def test_resume_accepts_a_matching_file_and_records_no_step_cap(
+    tmp_path: Path,
+) -> None:
+    runner = _load_runner()
+    args = _resume_args()
+    times = np.linspace(0.0, args.t_final, args.time_points)
+
+    with h5py.File(tmp_path / "mi.h5", "w") as handle:
+        runner._prepare_output(handle, args, times)
+        group = runner._require_point_group(handle, args, 2, 0.1, times)
+        # HDF5 cannot store None, so "no cap" is written as 0.
+        assert group.attrs["max_step"] == 0.0
+    with h5py.File(tmp_path / "mi.h5", "a") as handle:
+        runner._prepare_output(handle, args, times)
+
+
+def test_resume_refuses_a_file_from_the_old_trajectory_algorithm(
+    tmp_path: Path,
+) -> None:
+    runner = _load_runner()
+    args = _resume_args()
+    times = np.linspace(0.0, args.t_final, args.time_points)
+
+    with h5py.File(tmp_path / "old.h5", "w") as handle:
+        runner._prepare_output(handle, args, times)
+        stored = json.loads(str(handle.attrs["config_json"]))
+        del stored["trajectory_algorithm"]
+        handle.attrs["config_json"] = json.dumps(stored)
+
+    with h5py.File(tmp_path / "old.h5", "a") as handle:
+        with pytest.raises(ValueError, match="different trajectory algorithm"):
+            runner._prepare_output(handle, args, times)
+
+
+def test_resume_refuses_a_changed_configuration(tmp_path: Path) -> None:
+    runner = _load_runner()
+    times = np.linspace(0.0, 0.3, 4)
+
+    with h5py.File(tmp_path / "mi.h5", "w") as handle:
+        runner._prepare_output(handle, _resume_args(), times)
+    with h5py.File(tmp_path / "mi.h5", "a") as handle:
+        with pytest.raises(ValueError, match="config does not match"):
+            runner._prepare_output(handle, _resume_args(max_step=0.05), times)

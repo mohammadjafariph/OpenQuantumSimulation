@@ -188,7 +188,7 @@ def mcsolve(
     )
     backend_e_arrays = [*e_arrays, *state_observable_plan.operators]
     trajectory_count = int(n_traj if n_traj is not None else opts.n_traj)
-    seed = 0 if opts.seed is None else int(opts.seed)
+    seed = _seed_payload(opts)
 
     _validate_mcsolve_inputs(
         H,
@@ -282,7 +282,7 @@ def single_trajectory(
     psi0_array = np.asarray(psi0, dtype=np.complex128).reshape(-1)
     c_arrays = [op.data for op in c_ops or []]
     e_arrays = [op.data for op in e_ops or []]
-    seed = 0 if opts.seed is None else int(opts.seed)
+    seed = _seed_payload(opts)
     needs_states = bool(opts.save_states or state_observables)
 
     _validate_mcsolve_inputs(H, psi0_array, times, c_arrays, e_arrays, 1)
@@ -783,6 +783,16 @@ def _validate_state_observable_name(name: object) -> None:
     if "/" in name:
         msg = "state observable names must not contain '/'."
         raise ValueError(msg)
+
+
+# The backend reads -1 as "draw a fresh seed"; every non-negative integer,
+# including 0, is an ordinary reproducible seed.
+_FRESH_SEED = -1
+
+
+def _seed_payload(options: Options) -> int:
+    """Encode ``seed`` for the backend, where -1 means "draw a fresh seed"."""
+    return _FRESH_SEED if options.seed is None else int(options.seed)
 
 
 def _max_step_payload(options: Options) -> float:

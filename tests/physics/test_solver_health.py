@@ -175,7 +175,7 @@ def test_correlation_failure_raises_convergence_error() -> None:
             oqs.destroy(cavity),
             oqs.create(cavity),
             c_ops=c_ops,
-            options=oqs.Options(krylov_dim=4),
+            options=oqs.Options(method="krylov", krylov_dim=4),
         )
 
 

@@ -435,8 +435,11 @@ def brmesolve(
 
     ``a_ops`` pairs each bath-coupling operator with a spectrum callable
     ``gamma(omega)`` giving the dissipator weight at Bohr frequency
-    ``omega = E_m - E_n`` of the transition ``|n> -> |m>``. A constant weight
-    ``g`` is equivalent to a Lindblad collapse operator ``sqrt(g) * A``.
+    ``omega = E_m - E_n`` of the transition ``|n> -> |m>``. When ``A``
+    connects a single Bohr frequency (``sigmam`` on a qubit, for example), a
+    constant weight ``g`` is equivalent to a Lindblad collapse operator
+    ``sqrt(g) * A``; when it connects several, the secular approximation drops
+    the cross terms between them and the two differ.
     Decay (emission) channels sit at negative frequencies, so a
     zero-temperature bath returns ``g`` for ``omega < 0`` and ``0`` for
     ``omega > 0``.

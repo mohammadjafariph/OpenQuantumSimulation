@@ -9,16 +9,18 @@ same reference point.
 Current Snapshot
 ----------------
 
-Measured after the "trust the numbers" changes (waiting-time Monte Carlo
-stepper and solver health checks), on the commit after ``05b108f``.
+Measured on 2026-11-16 on the ``main`` line after ``0.1.0a6``: with the solver
+health checks, the waiting-time Monte Carlo stepper, and the performance work
+described under *What Changed* below.
+
+.. image:: _static/benchmarks/readme_benchmark_summary.png
+   :alt: Bar charts of how many times faster OpenQuantumSim is than QuTiP for Lindblad solves of Jaynes-Cummings models, Lindblad solves of sparse spin chains, and Monte Carlo trajectories on one and four threads.
 
 .. list-table::
    :header-rows: 1
 
    * - Item
      - Value
-   * - Date
-     - 2026-11-16
    * - CPU
      - AMD Ryzen 5 5600X (6 cores, 12 logical CPUs)
    * - Platform
@@ -32,87 +34,168 @@ stepper and solver health checks), on the commit after ``05b108f``.
    * - NumPy / SciPy / h5py
      - 2.5.4 / 1.18.1 / 3.16.0
 
-**Deterministic Lindblad solves.** Command:
+Every number in this section comes from one command, which writes JSON
+reports to ``runs/benchmarks/<date>/`` and redraws the figure above:
 
 .. code-block:: bash
 
-   MPLBACKEND=Agg PYTHON_JULIACALL_HANDLE_SIGNALS=yes \
-   python benchmarks/bench_vs_qutip.py \
-       --repeats 9 \
-       --time-points 81 \
-       --t-final 6.0 \
-       --cases qubit jc5 jc10 jc20 jc40 \
-       --oqs-methods auto krylov ode
+   bash scripts/run_benchmarks.sh
 
-Settings: ``rtol=1e-8``, ``atol=1e-10`` for both libraries; median of nine
-runs; OpenQuantumSim with its default ``method="auto"``.
+The individual commands are listed in that script and below. Timings are
+wall-clock medians; medians moved by up to about 20% between runs at the
+larger sizes.
+
+Lindblad Master Equation vs QuTiP
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: bash
+
+   python benchmarks/bench_vs_qutip.py --repeats 9 --time-points 81 --t-final 6.0 \
+       --cases qubit jc5 jc10 jc20 jc40 --oqs-methods auto krylov ode
+
+``rtol=1e-8``, ``atol=1e-10`` for both libraries, median of nine runs,
+OpenQuantumSim with its default ``method="auto"``.
 
 .. list-table::
    :header-rows: 1
 
    * - Case
      - Dimension
-     - QuTiP median
-     - OQS median
-     - OQS vs QuTiP
+     - QuTiP
+     - OpenQuantumSim
+     - Speed vs QuTiP
      - Max expectation delta
    * - Qubit decay
      - 2
-     - 1.97 ms
-     - 0.87 ms
-     - 2.27x
+     - 2.05 ms
+     - 0.85 ms
+     - 2.42x
      - 7.49e-09
    * - Jaynes-Cummings 5
      - 10
-     - 2.48 ms
-     - 1.17 ms
-     - 2.12x
+     - 2.72 ms
+     - 1.10 ms
+     - 2.48x
      - 1.21e-09
    * - Jaynes-Cummings 10
      - 20
-     - 3.15 ms
-     - 1.89 ms
-     - 1.67x
+     - 3.37 ms
+     - 1.70 ms
+     - 1.99x
      - 7.23e-09
    * - Jaynes-Cummings 20
      - 40
-     - 5.04 ms
-     - 4.68 ms
-     - 1.08x
+     - 5.27 ms
+     - 3.14 ms
+     - 1.68x
      - 1.96e-08
    * - Jaynes-Cummings 40
      - 80
-     - 12.77 ms
-     - 12.76 ms
-     - 1.00x
+     - 13.30 ms
+     - 12.74 ms
+     - 1.04x
      - 4.71e-08
 
-OpenQuantumSim is about twice as fast as QuTiP for small systems and on par
-from Hilbert dimension 40 upward. Medians varied by up to about 20% between
-runs at dimensions 40 and 80. ``method="krylov"`` was slower than the default
-at every size here and is only worth trying for long time steps.
+``method="krylov"`` was slower than the default at every size (0.18x-1.6x of
+QuTiP's speed) and is only worth trying for long time steps.
 
-The health checks cost 10-20% of the runtime at these sizes. On the same
-machine, the code before them was 2.74x, 2.24x, 1.24x and 1.12x faster than
-QuTiP for dimensions 2, 20, 40 and 80. Positivity is checked at up to 8
-evenly spaced output times (4 above dimension 64); checking it at every time
-had made dimensions 40-80 three times slower.
-
-**Monte Carlo trajectories.** Command:
+Large Sparse Systems vs QuTiP
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: bash
 
-   PYTHON_JULIACALL_HANDLE_SIGNALS=yes JULIA_NUM_THREADS=4 \
-   python benchmarks/bench_mcsolve_vs_qutip.py \
-       --n-traj 200 1000 5000 \
-       --repeats 5
+   python benchmarks/bench_sparse_scaling.py --cases spin9 spin10 \
+       --time-points 21 --t-final 5 --repeats 3
 
-Settings: spontaneous-emission qubit, ``gamma=0.35``, 31 output times up to
-``t=2``. Both libraries use QuTiP's default tolerances, ``rtol=1e-6`` and
-``atol=1e-8``. QuTiP runs serially (its default); OpenQuantumSim is timed on
-one Julia thread and on four. Both results are compared with the exact
-population ``exp(-gamma t)``; the benchmark also checks that the one-thread and
-four-thread results are identical.
+Nearest-neighbour Heisenberg spin chains with a transverse field and local
+amplitude damping; ``rtol=1e-6``, ``atol=1e-8`` for both libraries, one Julia
+thread.
+
+.. list-table::
+   :header-rows: 1
+
+   * - Case
+     - Dimension
+     - QuTiP
+     - OpenQuantumSim
+     - Speed vs QuTiP
+     - ``0.1.0a6``, same machine
+     - Max expectation delta
+   * - 9 spins
+     - 512
+     - 6.98 s
+     - 4.12 s
+     - 1.69x
+     - 9.19 s (0.73x)
+     - 1.2e-08
+   * - 10 spins
+     - 1024
+     - 37.2 s
+     - 19.3 s
+     - 1.93x
+     - 75.9 s (0.68x)
+     - 1.7e-08
+
+QuTiP used to be faster on these cases. With several Julia threads
+(``JULIA_NUM_THREADS=4``) the large sparse products are split across threads;
+the dimension-512 solve then took 2.6 s in the backend instead of 3.7 s.
+Dimension 2048 (11 spins) needs several GB of RAM for the stored states.
+
+Integrator Choices
+~~~~~~~~~~~~~~~~~~
+
+.. code-block:: bash
+
+   python benchmarks/bench_mesolve.py --cases jc5 jc10 jc20
+
+The same Jaynes-Cummings models at ``rtol=1e-8``, ``atol=1e-10``, compared
+with a reference solve by Vern9 at ``rtol=1e-12``.
+
+.. list-table::
+   :header-rows: 1
+
+   * - Dimension
+     - Tsit5 (default)
+     - Vern7
+     - Vern9
+     - Krylov
+     - Tsit5 max error
+   * - 10
+     - 0.78 ms
+     - 1.33 ms
+     - 1.39 ms
+     - 1.50 ms
+     - 4.7e-10
+   * - 20
+     - 1.39 ms
+     - 1.71 ms
+     - 1.75 ms
+     - 5.75 ms
+     - 7.5e-10
+   * - 40
+     - 4.08 ms
+     - 4.96 ms
+     - 7.58 ms
+     - 12.34 ms
+     - 1.4e-09
+
+Tsit5 is the fastest at these sizes and stays well inside the requested
+tolerance. Vern7 and Vern9 reach errors near ``1e-13`` for about 20-85% more
+time, which is worth it only when that accuracy is needed.
+
+Monte Carlo Trajectories vs QuTiP
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: bash
+
+   JULIA_NUM_THREADS=4 python benchmarks/bench_mcsolve_vs_qutip.py \
+       --n-traj 200 1000 5000 --repeats 5
+
+Spontaneous-emission qubit, ``gamma=0.35``, 31 output times up to ``t=2``,
+QuTiP's default tolerances (``rtol=1e-6``, ``atol=1e-8``) for both. QuTiP runs
+serially, its default. The script checks both results against the exact
+``exp(-gamma t)``, and checks that the one-thread and four-thread results are
+identical.
 
 .. list-table::
    :header-rows: 1
@@ -125,46 +208,145 @@ four-thread results are identical.
      - 4 threads vs QuTiP
      - Max error QuTiP / OQS
    * - 200
-     - 72.6 ms
-     - 10.8 ms
-     - 5.9 ms
-     - 6.7x
-     - 12.4x
+     - 74.1 ms
+     - 10.3 ms
+     - 5.2 ms
+     - 7.2x
+     - 14.3x
      - 0.070 / 0.070
    * - 1000
-     - 374.5 ms
-     - 45.1 ms
-     - 20.3 ms
-     - 8.3x
-     - 18.4x
+     - 371.0 ms
+     - 45.3 ms
+     - 20.6 ms
+     - 8.2x
+     - 18.0x
      - 0.033 / 0.022
    * - 5000
-     - 2505 ms
-     - 330.4 ms
-     - 97.1 ms
-     - 7.6x
-     - 25.8x
+     - 1852 ms
+     - 217.6 ms
+     - 92.3 ms
+     - 8.5x
+     - 20.1x
      - 0.016 / 0.010
 
-The maximum errors are statistical: each is about twice the standard error of
-a mean of that many trajectories, taken as the worst of 31 output times and
-five runs, and both libraries are equally accurate. On one thread
-OpenQuantumSim is 7-8x faster than QuTiP on this problem; four threads add
-another 1.8x-3.4x, more as the trajectory count grows.
+The errors are statistical: about twice the largest possible standard error
+of a mean of that many trajectories, taken as the worst of 31 times and five
+runs. Both libraries are equally accurate.
+
+Monte Carlo Thread Scaling
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: bash
+
+   JULIA_NUM_THREADS=4 python benchmarks/bench_mcsolve.py \
+       --n-traj 5000 --time-points 41 --t-final 4.0 --repeats 5 --n-jobs 1 2 4
+
+.. list-table::
+   :header-rows: 1
+
+   * - ``n_jobs``
+     - Median
+     - Speed-up
+     - Max difference from 1 thread
+   * - 1
+     - 277 ms
+     - 1.00x
+     - 0
+   * - 2
+     - 222 ms
+     - 1.25x
+     - 0
+   * - 4
+     - 119 ms
+     - 2.33x
+     - 0
+
+A qubit trajectory is so cheap that per-trajectory overhead limits the
+scaling; larger systems scale better. The results are bit-for-bit identical
+for every thread count.
+
+Dicke Mutual-Information Batches
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: bash
+
+   JULIA_NUM_THREADS=1 python examples/dicke/bench_mi.py --N 4 --kappa 0.1 \
+       --n-traj 40 --time-points 21 --t-final 0.2 --batch-size 10 --repeats 3 \
+       --n-jobs 1 2 --target-n-traj 1000
+
+.. list-table::
+   :header-rows: 1
+
+   * - ``n_jobs``
+     - Median
+     - Trajectories / s
+     - Difference from serial
+   * - 1
+     - 0.42 s
+     - 95.8
+     - 0
+   * - 2 (processes)
+     - 29.0 s
+     - 1.4
+     - 0
+
+Each worker process starts its own Julia runtime, which costs far more than
+these short batches. Use one process, with Julia threads for parallelism,
+unless batches run for minutes.
+
+What Changed
+~~~~~~~~~~~~
+
+Backend timings for the same problems before and after the performance work,
+measured directly in Julia on the same machine with one thread.
+
+.. list-table::
+   :header-rows: 1
+
+   * - Solver and problem
+     - Before
+     - After
+     - Change
+   * - ``mesolve``, spin chain, dimension 512
+     - about 10.7 s
+     - 3.7 s
+     - Generator built from triplets (2.2 s to 0.4 s) and applied row by row
+   * - ``mcsolve``, 40 trajectories, spin chain, dimension 256 / 512
+     - 2.45 s / 6.24 s
+     - 0.40 s / 0.88 s
+     - Sparse operators in trajectories
+   * - Time-dependent ``mesolve``, driven Jaynes-Cummings, dimension 40 / 80
+     - 84 ms / 535 ms
+     - 13 ms / 53 ms
+     - Sparse superoperator sum instead of dense products
+   * - ``brmesolve``, Jaynes-Cummings, dimension 20 / 40
+     - 1.8 s / 54 s
+     - 2.8 ms / 12 ms
+     - Sorted frequency grouping; sparse generator in the eigenbasis
+   * - ``correlation_2op_1t``, Jaynes-Cummings, dimension 20 / 40
+     - 20 ms / 88 ms
+     - 8 ms / 31 ms
+     - ODE propagation for ``method="auto"``
+   * - Health checks inside ``mesolve``, dimension 40
+     - 6.2 ms
+     - 0.3 ms
+     - Positivity spot-checked with a Cholesky test
+
+All of these give the same results as before to within the requested
+tolerance; the test suite compares each new path with the old formula or an
+independent solve.
 
 Historical Snapshots
 --------------------
 
-The sections below were measured on an Apple M1 with ``0.1.0a2`` to
-``0.1.0a6``, before the solver health checks and the waiting-time Monte Carlo
-stepper. They are kept for comparison and should not be quoted for the current
-code.
-
-.. image:: _static/benchmarks/readme_benchmark_summary.png
-   :alt: Historical Apple M1 benchmark summary comparing deterministic QuTiP speedups and MCWF backend threading.
+The sections below were measured with ``0.1.0a2`` to ``0.1.0a6``, mostly on
+an Apple M1, before the solver health checks, the waiting-time Monte Carlo
+stepper and the performance work above. They are kept for comparison and
+should not be quoted for the current code. The startup and sysimage numbers
+have not been re-measured since ``0.1.0a5``.
 
 Benchmark Environment
----------------------
+~~~~~~~~~~~~~~~~~~~~~
 
 .. list-table::
    :header-rows: 1
@@ -195,7 +377,7 @@ Benchmark Environment
      - 2.4.4 / 1.17.1 / 3.16.0
 
 Deterministic Solver: OpenQuantumSim vs QuTiP
----------------------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Command:
 
@@ -251,7 +433,7 @@ deterministic benchmark cases on this machine. Expectation values agree with
 QuTiP at about ``1e-9`` to ``1e-8``.
 
 Python Wrapper Profile
-----------------------
+~~~~~~~~~~~~~~~~~~~~~~
 
 The main small-system bottleneck was not the Julia integrator. It was repeated
 Python-side probing of optional fields in the Julia ``NamedTuple`` used for
@@ -275,7 +457,7 @@ Python-side probing of optional fields in the Julia ``NamedTuple`` used for
      - 0.007 s
 
 Backend Startup Profile
------------------------
+~~~~~~~~~~~~~~~~~~~~~~~
 
 Command:
 
@@ -335,7 +517,7 @@ The same change also suppresses routine Julia package-manager output during
 normal solver calls.
 
 Local Sysimage Startup
-----------------------
+~~~~~~~~~~~~~~~~~~~~~~
 
 For repeated solver sessions, ``oqs build-sysimage`` compiles the packaged Julia
 backend into a local sysimage and validates it with a fresh JuliaCall process
@@ -381,7 +563,7 @@ The warm sysimage profile was 2.1x faster end-to-end than warm startup without
 a sysimage, with the first solver call itself 3.5x faster.
 
 Larger Deterministic Spot Checks
---------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Command:
 
@@ -422,7 +604,7 @@ Command:
      - 4.71e-08
 
 Monte Carlo Wave Functions: OpenQuantumSim vs QuTiP
----------------------------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. note::
 
@@ -486,7 +668,7 @@ QuTiP after backend warmup. The exact speedup is workload-specific and should
 be re-measured for larger Hilbert spaces and more expensive observables.
 
 Monte Carlo Wave Function Scaling
----------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Command:
 
@@ -534,7 +716,7 @@ affected by Python-call overhead at this size. Larger trajectory counts should
 give a clearer measure of Julia-side scaling.
 
 Dicke Mutual-Information Batch Runner
--------------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Command:
 
@@ -583,7 +765,7 @@ parallelism is slower for small batches. Larger batches better amortize startup
 costs.
 
 Sparse Scaling (Hilbert Dimensions 512-2048)
----------------------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 ``benchmarks/bench_sparse_scaling.py`` measures ``mesolve`` on nearest-neighbour
 spin chains with local amplitude damping, where the Hamiltonian and collapse
@@ -634,5 +816,9 @@ these numbers:
 Reproducing Results
 -------------------
 
-The raw JSON outputs are generated under ``runs/benchmarks/`` and are ignored by
-Git. Re-run the commands above to regenerate the local benchmark artifacts.
+``bash scripts/run_benchmarks.sh`` re-runs every current benchmark and writes
+JSON reports to ``runs/benchmarks/<date>/``, which Git ignores; add
+``--sysimage`` to also time startup with a freshly built sysimage (about 15
+minutes). ``python benchmarks/plot_benchmark_summary.py <report directory>``
+redraws the summary figure from those reports. Close other heavy programs
+first: every number is a wall-clock time.

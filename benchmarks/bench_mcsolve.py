@@ -30,15 +30,17 @@ def main() -> None:
     _warm_up(system, args)
 
     rows: list[dict[str, Any]] = []
-    reference_expect: np.ndarray | None = None
+    reference_expect: list[np.ndarray] | None = None
     serial_elapsed: float | None = None
     for n_jobs in args.n_jobs:
-        row, reference_expect = _benchmark_mode(
+        row, expects = _benchmark_mode(
             system,
             args,
             n_jobs,
             reference_expect,
         )
+        if reference_expect is None:
+            reference_expect = expects
         if n_jobs == 1:
             serial_elapsed = float(row["elapsed_s"])
             row["speedup_vs_serial"] = 1.0
@@ -165,15 +167,21 @@ def _benchmark_mode(
     system: tuple[oqs.Operator, np.ndarray, np.ndarray, oqs.Operator, oqs.Operator],
     args: argparse.Namespace,
     n_jobs: int,
-    reference_expect: np.ndarray | None,
-) -> tuple[dict[str, Any], np.ndarray]:
+    reference_expect: list[np.ndarray] | None,
+) -> tuple[dict[str, Any], list[np.ndarray]]:
+    """Time one job mode.
+
+    Repeat ``r`` always uses seed ``seed + r``. ``max_abs_delta`` compares each
+    repeat with the first mode's run of the same seed; every trajectory has
+    its own random stream, so it should be exactly zero for any thread count.
+    """
     hamiltonian, psi0, times, collapse, excited_projector = system
     elapsed_values: list[float] = []
     backend_values: list[float] = []
     workers_values: list[int] = []
     threaded_values: list[bool] = []
     max_delta = 0.0
-    latest_expect: np.ndarray | None = None
+    expects: list[np.ndarray] = []
 
     for repeat in range(args.repeats):
         started = time.perf_counter()
@@ -195,21 +203,16 @@ def _benchmark_mode(
         backend_values.append(float(result.solver_stats.get("wall_time", 0.0)))
         workers_values.append(int(result.solver_stats.get("n_workers", 1)))
         threaded_values.append(bool(result.solver_stats.get("threaded", False)))
-        latest_expect = result.expect[0].real.copy()
-
-        if reference_expect is None and n_jobs == 1 and repeat == 0:
-            reference_expect = latest_expect.copy()
+        expects.append(result.expect[0].real.copy())
         if reference_expect is not None:
             max_delta = max(
                 max_delta,
-                float(np.max(np.abs(latest_expect - reference_expect))),
+                float(np.max(np.abs(expects[-1] - reference_expect[repeat]))),
             )
 
-    if latest_expect is None:
+    if not expects:
         msg = "benchmark did not run any repeats"
         raise RuntimeError(msg)
-    if reference_expect is None:
-        reference_expect = latest_expect.copy()
 
     row = {
         "n_jobs": n_jobs,
@@ -220,7 +223,7 @@ def _benchmark_mode(
         "speedup_vs_serial": None,
         "max_abs_delta": max_delta,
     }
-    return row, reference_expect
+    return row, expects
 
 
 def _print_rows(rows: list[dict[str, Any]]) -> None:

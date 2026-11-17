@@ -76,12 +76,24 @@ contributes
    A(\omega) \rho A^\dagger(\omega)
    - \tfrac{1}{2}\{A^\dagger(\omega) A(\omega), \rho\} \right],
 
-where :math:`\gamma(\omega)` is the user-supplied spectrum. Because
-:math:`A(\omega)` partitions :math:`A`, a constant spectrum
-:math:`\gamma(\omega) = g` is exactly equivalent to a Lindblad collapse
-operator :math:`\sqrt{g}\,A` — the sanity check used in the test suite. Decay
+where :math:`\gamma(\omega)` is the user-supplied spectrum. The channels
+:math:`A(\omega)` sum to :math:`A`, but a Lindblad collapse operator
+:math:`\sqrt{g}\,A` also produces cross terms
+:math:`A(\omega)\rho A^\dagger(\omega')` between different frequencies,
+which the secular approximation drops. A constant spectrum
+:math:`\gamma(\omega) = g` is therefore equivalent to :math:`\sqrt{g}\,A`
+only when :math:`A` connects a single Bohr frequency, such as
+:math:`\sigma_-` for a qubit; that is the case the test suite checks. For
+:math:`\sigma_x` on a qubit, which connects :math:`\pm\omega_0`, the two
+differ. Decay
 (emission) channels sit at :math:`\omega < 0`; a zero-temperature bath
 therefore assigns weight only to negative frequencies.
+
+In the energy eigenbasis the coherent part is diagonal and each channel
+:math:`A(\omega)` has one entry per transition at that frequency, so the
+generator is sparse there. ``brmesolve`` builds it in that basis, propagates
+the state there, and rotates only the outputs back; the rotation is unitary,
+so trace, Hermiticity, eigenvalues and entropy are computed without it.
 
 Quantum Regression Theorem
 --------------------------

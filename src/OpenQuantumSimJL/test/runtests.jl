@@ -2,6 +2,8 @@ using Test
 using HDF5
 using LinearAlgebra
 using OpenQuantumSimJL
+using Random
+using SparseArrays
 
 @testset "Hilbert spaces" begin
     f = FockSpace(4; label="cavity")
@@ -596,6 +598,17 @@ end
     states = [good for _ in 1:50]
     push!(states, bad)
     @test OpenQuantumSimJL._density_health(states, d).min_eigenvalue ≈ -0.2
+
+    # The Cholesky screen: positive and pure (rank-deficient) states report 0,
+    # tiny negative rounding within the margin is tolerated, and anything
+    # beyond it is reported exactly.
+    negative = OpenQuantumSimJL._negative_eigenvalue
+    psi = normalize(ComplexF64[1, 2im, -1])
+    @test negative(Matrix(I, 3, 3) / 3) == 0.0
+    @test negative(psi * psi') == 0.0
+    @test negative(ComplexF64[1 0; 0 -1e-12]) == 0.0
+    @test negative(ComplexF64[1.01 0; 0 -0.01]) ≈ -0.01
+    @test negative(ComplexF64[0.5 0.6; 0.6 0.5]) ≈ -0.1
 end
 
 @testset "solver health: integrator failure is reported, not hidden" begin
@@ -661,11 +674,18 @@ end
     H, c_ops, rho0 = _driven_cavity(12)
     a = c_ops[1] ./ sqrt(0.5)
 
-    starved = correlation_2op_1t(H, rho0, [0.0, 50.0], a, a', c_ops; krylov_dim = 4)
+    starved = correlation_2op_1t(
+        H, rho0, [0.0, 50.0], a, a', c_ops; method = "krylov", krylov_dim = 4,
+    )
     @test !starved.solver_stats.success
     @test !starved.solver_stats.krylov_converged
 
-    krylov = correlation_2op_1t(H, rho0, [0.0, 1.0, 2.0], a, a', c_ops; krylov_dim = 30)
+    krylov = correlation_2op_1t(
+        H, rho0, [0.0, 1.0, 2.0], a, a', c_ops; method = "krylov", krylov_dim = 30,
+    )
+    default = correlation_2op_1t(H, rho0, [0.0, 1.0, 2.0], a, a', c_ops)
+    @test default.solver_stats.method == "auto"
+    @test default.correlations ≈ krylov.correlations atol=1e-7
     ode = correlation_2op_1t(H, rho0, [0.0, 1.0, 2.0], a, a', c_ops; method = "ode", ode_solver = "vern7")
     @test krylov.solver_stats.success
     @test ode.solver_stats.success
@@ -998,4 +1018,147 @@ end
     @test_throws ArgumentError mcsolve(
         H, psi0, times, [sqrt(gamma) * sm], [projector], 80, 505, 0.0, 1, checkpoint_file, 10, false, 1e-6, 1e-8,
     )
+end
+
+# ---------------------------------------------------------------------------
+# Performance paths: they must give the same answers as the plain formulas.
+# ---------------------------------------------------------------------------
+
+function _reference_liouvillian(H, c_ops)
+    d = size(H, 1)
+    I_d = sparse(ComplexF64(1) * I, d, d)
+    L = -1im * (kron(I_d, H) - kron(transpose(H), I_d))
+    for c in c_ops
+        cdgc = c' * c
+        L += kron(conj(c), c) - 0.5 * kron(I_d, cdgc) - 0.5 * kron(transpose(cdgc), I_d)
+    end
+    return sparse(L)
+end
+
+@testset "Liouvillian assembly matches the Kronecker formula" begin
+    rng = Xoshiro(11)
+    for d in (1, 2, 7)
+        # Non-Hermitian on purpose: the assembly must not assume Hermiticity.
+        H = sprandn(rng, ComplexF64, d, d, 0.5)
+        c_ops = [sprandn(rng, ComplexF64, d, d, 0.5) for _ in 1:3]
+        reference = _reference_liouvillian(H, c_ops)
+        @test maximum(abs, OpenQuantumSimJL.liouvillian(H, c_ops) - reference; init = 0.0) < 1e-12
+        @test maximum(abs, OpenQuantumSimJL.liouvillian(Matrix(H), Matrix.(c_ops)) - reference; init = 0.0) < 1e-12
+        op = OpenQuantumSimJL.liouvillian_operator(H, c_ops)
+        x = randn(rng, ComplexF64, d * d)
+        @test op * x ≈ reference * x
+        @test size(op) == (d * d, d * d)
+        @test sparse(op) ≈ reference
+    end
+    @test OpenQuantumSimJL.liouvillian(zeros(ComplexF64, 2, 2), Matrix{ComplexF64}[]) == spzeros(ComplexF64, 4, 4)
+end
+
+@testset "row-major products, single- and multi-threaded" begin
+    rng = Xoshiro(12)
+    # Large enough to take the threaded path when Julia has several threads.
+    n = OpenQuantumSimJL.ROW_MAJOR_THREADING_MIN_ROWS + 1_234
+    A = sprandn(rng, ComplexF64, n, n, 8 / n)
+    op = OpenQuantumSimJL._matvec_operator(A)
+    x = randn(rng, ComplexF64, n)
+    y = zeros(ComplexF64, n)
+    mul!(y, op, x)
+    @test y ≈ A * x
+    first_result = copy(y)
+    mul!(y, op, x)
+    @test y == first_result  # every row is summed in a fixed order
+    z = randn(rng, ComplexF64, n)
+    expected = (0.5 - 2im) * (A * x) + (3 + 1im) * z
+    mul!(z, op, x, 0.5 - 2im, 3 + 1im)
+    @test z ≈ expected
+    @test_throws DimensionMismatch mul!(zeros(ComplexF64, n - 1), op, x)
+    @test_throws DimensionMismatch mul!(y, op, zeros(ComplexF64, n + 1))
+    @test_throws DimensionMismatch mul!(y, op, zeros(ComplexF64, n + 1), 1, 0)
+    @test OpenQuantumSimJL._matvec_operator(Matrix(A[1:3, 1:3])) isa Matrix
+end
+
+@testset "sparse trajectories: cavity decay" begin
+    # A large, mostly-zero problem takes the sparse path. A one-photon cavity
+    # state decays with P(1) = exp(-kappa t) whatever the truncation.
+    n = 40
+    a = OpenQuantumSimJL.destroy(n)
+    H = a' * a
+    kappa = 0.6
+    psi0 = zeros(ComplexF64, n)
+    psi0[2] = 1
+    projector = spzeros(ComplexF64, n, n)
+    projector[2, 2] = 1
+    times = collect(range(0.0, 2.0; length = 11))
+    H_used, c_used, e_used = OpenQuantumSimJL._prepare_trajectory_operators(H, [sqrt(kappa) * a], [projector])
+    @test H_used isa SparseMatrixCSC
+    @test eltype(c_used) <: SparseMatrixCSC
+    @test eltype(e_used) <: SparseMatrixCSC
+
+    result = mcsolve(H, psi0, times, [sqrt(kappa) * a], [projector], 4000, 31, 0.0, 1)
+    exact = exp.(-kappa .* times)
+    @test maximum(abs.(real.(result.expect[1, :]) .- exact) ./ max.(result.expect_stderr[1, :], 1 / 4000)) < 5
+
+    # A small or dense problem stays dense, and both forms hash alike.
+    small_H, small_c, _ = OpenQuantumSimJL._prepare_trajectory_operators(
+        OpenQuantumSimJL.sigmaz(), [OpenQuantumSimJL.sigmam()], Matrix{ComplexF64}[],
+    )
+    @test small_H isa Matrix
+    @test eltype(small_c) <: Matrix
+    hash_of(op) = bytes2hex(take!(OpenQuantumSimJL._hash_array!(IOBuffer(), "H", op)))
+    @test hash_of(Matrix(H)) == hash_of(H)
+end
+
+@testset "time-dependent superoperator path matches constant Hamiltonians" begin
+    # With a constant coefficient, H0 + f H1 is time independent, so the
+    # time-dependent solver must agree with mesolve on H0 + f H1.
+    n = 20
+    a = kron(OpenQuantumSimJL.destroy(n), OpenQuantumSimJL.eye(2))
+    sm = kron(OpenQuantumSimJL.eye(n), OpenQuantumSimJL.sigmam())
+    H0 = a' * a + 0.5 * kron(OpenQuantumSimJL.eye(n), OpenQuantumSimJL.sigmaz()) + 0.1 * (a' * sm + a * sm')
+    H1 = a + a'
+    c_ops = [sqrt(0.05) * a, sqrt(0.02) * sm]
+    rho0 = zeros(ComplexF64, 2n, 2n)
+    rho0[1, 1] = 1
+    times = collect(range(0.0, 4.0; length = 9))
+    drive = 0.3
+    td = mesolve_time_dependent(
+        Matrix(H0), [Matrix(H1)], [drive], rho0, times, Matrix.(c_ops), [Matrix(a' * a)], 1e-9, 1e-11, false, false,
+    )
+    @test td.solver_stats.superoperator
+    ti = mesolve(H0 + drive * H1, rho0, times, c_ops, [a' * a], 1e-9, 1e-11, false, "ode", 30, false)
+    @test td.expect ≈ ti.expect atol = 1e-7
+
+    # A small problem keeps the dense form and gives the same physics.
+    small = mesolve_time_dependent(
+        ComplexF64[1 0; 0 -1], [ComplexF64[0 1; 1 0]], [drive], ComplexF64[1 0; 0 0], times,
+        Matrix{ComplexF64}[], [ComplexF64[1 0; 0 0]], 1e-9, 1e-11, false, false,
+    )
+    @test !small.solver_stats.superoperator
+end
+
+@testset "Bloch-Redfield eigenbasis propagation matches the generator" begin
+    n = 5
+    a = Matrix(kron(OpenQuantumSimJL.destroy(n), OpenQuantumSimJL.eye(2)))
+    sm = Matrix(kron(OpenQuantumSimJL.eye(n), OpenQuantumSimJL.sigmam()))
+    H = a' * a + 0.5 * Matrix(kron(OpenQuantumSimJL.eye(n), OpenQuantumSimJL.sigmaz())) + 0.08 * (a' * sm + a * sm')
+    psi = zeros(ComplexF64, 2n)
+    psi[3] = 1
+    rho0 = psi * psi'
+    thermal(w) = w == 0 ? 0.0 : (w < 0 ? 0.1 * (1 + 1 / (exp(-w / 0.5) - 1)) : 0.1 / (exp(w / 0.5) - 1))
+    flat(w) = w < 0 ? 0.05 : 0.0
+    times = collect(range(0.0, 10.0; length = 11))
+
+    br = brmesolve(H, rho0, times, [a, sm], [thermal, flat], [a' * a], 1e-10, 1e-12, true, "ode", 30, false)
+    # Propagate the computational-basis generator directly as a reference.
+    L = OpenQuantumSimJL.br_liouvillian(H, [a, sm], [thermal, flat])
+    reference, _, _ = OpenQuantumSimJL._solve_liouvillian(L, vec(copy(rho0)), times; rtol = 1e-10, atol = 1e-12)
+    for idx in eachindex(times)
+        @test br.states[:, :, idx] ≈ reshape(reference[idx], 2n, 2n) atol = 1e-8
+    end
+    @test real(br.expect[1, end]) ≈ real(tr(a' * a * reshape(reference[end], 2n, 2n))) atol = 1e-8
+
+    # Grouping by sorted frequency keeps degenerate transitions together.
+    groups = OpenQuantumSimJL._br_channel_groups([0.0, 1.0, 2.0])
+    sizes = sort(length.(groups))
+    @test sizes == [1, 1, 2, 2, 3]
+    @test sum(sizes) == 9
 end

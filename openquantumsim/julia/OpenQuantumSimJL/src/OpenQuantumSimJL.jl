@@ -11,6 +11,7 @@ using SpecialFunctions
 
 include("HilbertSpace.jl")
 include("Operators.jl")
+include("Superoperators.jl")
 include("Propagators.jl")
 include("Health.jl")
 include("Observables.jl")

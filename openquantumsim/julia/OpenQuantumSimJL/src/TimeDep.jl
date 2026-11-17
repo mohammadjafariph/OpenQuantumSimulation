@@ -94,6 +94,35 @@ function _lindblad_rhs_time_dependent!(
     return nothing
 end
 
+# For large problems whose operators are mostly zero, the master equation is
+# integrated as a sparse superoperator sum L0 + sum_i f_i(t) K_i, applied
+# row by row; each right-hand side then costs O(nnz) instead of the O(d^3)
+# dense matrix products used below the thresholds.
+const TIMEDEP_SUPEROPERATOR_MIN_DIM = 32
+const TIMEDEP_SUPEROPERATOR_MAX_DENSITY = 0.1
+
+struct _TimeDependentGenerator{C}
+    static::RowMajorOperator
+    terms::Vector{RowMajorOperator}
+    coefficients::C
+end
+
+function _lindblad_rhs_superoperator!(du, u, generator::_TimeDependentGenerator, t)
+    mul!(du, generator.static, u)
+    for idx in eachindex(generator.terms)
+        value = _coefficient_value(generator.coefficients[idx], t)
+        iszero(value) && continue
+        mul!(du, generator.terms[idx], u, value, true)
+    end
+    return nothing
+end
+
+function _use_superoperator_form(d::Integer, operators)
+    d >= TIMEDEP_SUPEROPERATOR_MIN_DIM || return false
+    limit = TIMEDEP_SUPEROPERATOR_MAX_DENSITY * d^2
+    return all(count(!iszero, op) <= limit for op in operators)
+end
+
 function mesolve_time_dependent(
     H0,
     term_ops,
@@ -130,18 +159,36 @@ function mesolve_time_dependent(
         size(op) == (d, d) || throw(DimensionMismatch("expectation operators must match H0."))
     end
 
-    cdgc_ops = [c' * c for c in collapse_ops]
     u0 = vec(copy(rho0c))
-
-    Hbuf = similar(H0c)
-    leftbuf = similar(H0c)
-    rightbuf = similar(H0c)
-    params = (H0c, h_terms, coeffs, collapse_ops, cdgc_ops, Hbuf, leftbuf, rightbuf, d)
+    superoperator = _use_superoperator_form(d, vcat([H0c], h_terms, collapse_ops))
+    if superoperator
+        no_collapse = SparseMatrixCSC{ComplexF64, Int64}[]
+        rhs! = _lindblad_rhs_superoperator!
+        params = _TimeDependentGenerator(
+            liouvillian_operator(sparse(H0c), [sparse(c) for c in collapse_ops]),
+            [liouvillian_operator(sparse(op), no_collapse) for op in h_terms],
+            coeffs,
+        )
+    else
+        cdgc_ops = [c' * c for c in collapse_ops]
+        rhs! = _lindblad_rhs_time_dependent!
+        params = (
+            H0c,
+            h_terms,
+            coeffs,
+            collapse_ops,
+            cdgc_ops,
+            similar(H0c),
+            similar(H0c),
+            similar(H0c),
+            d,
+        )
+    end
 
     local sol_u, report
     elapsed = @elapsed begin
         sol_u, report = _solve_ode_at_times(
-            _lindblad_rhs_time_dependent!,
+            rhs!,
             u0,
             times,
             params;
@@ -165,6 +212,11 @@ function mesolve_time_dependent(
     )
     return merge(
         collected,
-        (solver_stats = merge(collected.solver_stats, (time_dependent = true,)),),
+        (
+            solver_stats = merge(
+                collected.solver_stats,
+                (time_dependent = true, superoperator = superoperator),
+            ),
+        ),
     )
 end

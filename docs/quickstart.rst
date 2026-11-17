@@ -86,8 +86,11 @@ bath coupling pairs an operator with a spectrum callable:
        e_ops=[projector],
    )
 
-A constant spectrum ``gamma = g`` is equivalent to a Lindblad collapse operator
+When ``A`` connects a single Bohr frequency, as ``sigmam`` does for a qubit, a
+constant spectrum ``gamma = g`` is equivalent to a Lindblad collapse operator
 ``sqrt(g) * A``, which makes BR results easy to check against ``mesolve``.
+When ``A`` connects several frequencies the two differ, because the secular
+approximation drops the cross terms between them.
 
 Entanglement and correlation diagnostics work on plain NumPy states, so they
 can be applied to any saved density matrix:

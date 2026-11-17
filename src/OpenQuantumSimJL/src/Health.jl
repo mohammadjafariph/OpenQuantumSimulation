@@ -173,8 +173,10 @@ end
 """
 Invariants of a density-matrix time series stored as vectorised states:
 the largest change of the trace relative to the first state, the largest
-anti-Hermitian element, and the smallest eigenvalue of the Hermitian part.
-Non-finite states (from a failed integration) are skipped.
+anti-Hermitian element, and the most negative eigenvalue of the Hermitian
+part among the spot-checked states (0 when they are all positive to within
+`POSITIVITY_MARGIN`; see `_negative_eigenvalue`). Non-finite states (from a
+failed integration) are skipped.
 """
 function _density_health(sol_u, d::Integer)
     n_times = length(sol_u)
@@ -209,7 +211,7 @@ function _density_health(sol_u, d::Integer)
     for idx in _positivity_sample_indices(n_times, Int(d))
         rho = reshape(sol_u[idx], d, d)
         all(isfinite, rho) || continue
-        smallest = eigmin(Hermitian(Matrix{ComplexF64}((rho .+ rho') ./ 2)))
+        smallest = _negative_eigenvalue(rho)
         min_eigenvalue = samples == 0 ? smallest : min(min_eigenvalue, smallest)
         samples += 1
     end
@@ -221,4 +223,30 @@ function _density_health(sol_u, d::Integer)
         positivity_samples = samples,
         n_nonfinite_states = n_times - n_finite,
     )
+end
+
+# A state counts as positive when rho + margin * trace * I has a Cholesky
+# factorisation. That proves every eigenvalue is above -margin * trace at a
+# fraction of the cost of computing the smallest one.
+const POSITIVITY_MARGIN = 1e-9
+
+"""
+Return the smallest eigenvalue of the Hermitian part of `rho` if it is
+negative beyond `POSITIVITY_MARGIN` (relative to the trace), and 0 otherwise.
+
+The eigenvalue decomposition, which costs several times more than a Cholesky
+factorisation, is only computed for a state that fails the Cholesky test.
+"""
+function _negative_eigenvalue(rho::AbstractMatrix)::Float64
+    hermitian = Matrix{ComplexF64}(undef, size(rho))
+    @inbounds for col in axes(rho, 2), row in axes(rho, 1)
+        hermitian[row, col] = (rho[row, col] + conj(rho[col, row])) / 2
+    end
+    scale = max(1.0, abs(real(tr(hermitian))))
+    shifted = copy(hermitian)
+    @inbounds for idx in axes(shifted, 1)
+        shifted[idx, idx] += POSITIVITY_MARGIN * scale
+    end
+    issuccess(cholesky!(Hermitian(shifted); check = false)) && return 0.0
+    return min(0.0, eigmin(Hermitian(hermitian)))
 end

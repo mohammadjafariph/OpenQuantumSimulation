@@ -6,8 +6,162 @@ numbers below are not a universal leaderboard; they document one hardware and
 software configuration so future benchmark results can be compared against the
 same reference point.
 
+Current Snapshot
+----------------
+
+Measured after the "trust the numbers" changes (waiting-time Monte Carlo
+stepper and solver health checks), on the commit after ``05b108f``.
+
+.. list-table::
+   :header-rows: 1
+
+   * - Item
+     - Value
+   * - Date
+     - 2026-11-16
+   * - CPU
+     - AMD Ryzen 5 5600X (6 cores, 12 logical CPUs)
+   * - Platform
+     - Windows 11, x86-64
+   * - Python
+     - 3.13.14
+   * - Julia backend runtime
+     - 1.11.9 through JuliaCall 0.9.37
+   * - QuTiP
+     - 5.3.1
+   * - NumPy / SciPy / h5py
+     - 2.5.4 / 1.18.1 / 3.16.0
+
+**Deterministic Lindblad solves.** Command:
+
+.. code-block:: bash
+
+   MPLBACKEND=Agg PYTHON_JULIACALL_HANDLE_SIGNALS=yes \
+   python benchmarks/bench_vs_qutip.py \
+       --repeats 9 \
+       --time-points 81 \
+       --t-final 6.0 \
+       --cases qubit jc5 jc10 jc20 jc40 \
+       --oqs-methods auto krylov ode
+
+Settings: ``rtol=1e-8``, ``atol=1e-10`` for both libraries; median of nine
+runs; OpenQuantumSim with its default ``method="auto"``.
+
+.. list-table::
+   :header-rows: 1
+
+   * - Case
+     - Dimension
+     - QuTiP median
+     - OQS median
+     - OQS vs QuTiP
+     - Max expectation delta
+   * - Qubit decay
+     - 2
+     - 1.97 ms
+     - 0.87 ms
+     - 2.27x
+     - 7.49e-09
+   * - Jaynes-Cummings 5
+     - 10
+     - 2.48 ms
+     - 1.17 ms
+     - 2.12x
+     - 1.21e-09
+   * - Jaynes-Cummings 10
+     - 20
+     - 3.15 ms
+     - 1.89 ms
+     - 1.67x
+     - 7.23e-09
+   * - Jaynes-Cummings 20
+     - 40
+     - 5.04 ms
+     - 4.68 ms
+     - 1.08x
+     - 1.96e-08
+   * - Jaynes-Cummings 40
+     - 80
+     - 12.77 ms
+     - 12.76 ms
+     - 1.00x
+     - 4.71e-08
+
+OpenQuantumSim is about twice as fast as QuTiP for small systems and on par
+from Hilbert dimension 40 upward. Medians varied by up to about 20% between
+runs at dimensions 40 and 80. ``method="krylov"`` was slower than the default
+at every size here and is only worth trying for long time steps.
+
+The health checks cost 10-20% of the runtime at these sizes. On the same
+machine, the code before them was 2.74x, 2.24x, 1.24x and 1.12x faster than
+QuTiP for dimensions 2, 20, 40 and 80. Positivity is checked at up to 8
+evenly spaced output times (4 above dimension 64); checking it at every time
+had made dimensions 40-80 three times slower.
+
+**Monte Carlo trajectories.** Command:
+
+.. code-block:: bash
+
+   PYTHON_JULIACALL_HANDLE_SIGNALS=yes JULIA_NUM_THREADS=4 \
+   python benchmarks/bench_mcsolve_vs_qutip.py \
+       --n-traj 200 1000 5000 \
+       --repeats 5
+
+Settings: spontaneous-emission qubit, ``gamma=0.35``, 31 output times up to
+``t=2``. Both libraries use QuTiP's default tolerances, ``rtol=1e-6`` and
+``atol=1e-8``. QuTiP runs serially (its default); OpenQuantumSim is timed on
+one Julia thread and on four. Both results are compared with the exact
+population ``exp(-gamma t)``; the benchmark also checks that the one-thread and
+four-thread results are identical.
+
+.. list-table::
+   :header-rows: 1
+
+   * - Trajectories
+     - QuTiP
+     - OQS, 1 thread
+     - OQS, 4 threads
+     - 1 thread vs QuTiP
+     - 4 threads vs QuTiP
+     - Max error QuTiP / OQS
+   * - 200
+     - 72.6 ms
+     - 10.8 ms
+     - 5.9 ms
+     - 6.7x
+     - 12.4x
+     - 0.070 / 0.070
+   * - 1000
+     - 374.5 ms
+     - 45.1 ms
+     - 20.3 ms
+     - 8.3x
+     - 18.4x
+     - 0.033 / 0.022
+   * - 5000
+     - 2505 ms
+     - 330.4 ms
+     - 97.1 ms
+     - 7.6x
+     - 25.8x
+     - 0.016 / 0.010
+
+The maximum errors are statistical: each is about twice the standard error of
+a mean of that many trajectories, taken as the worst of 31 output times and
+five runs, and both libraries are equally accurate. On one thread
+OpenQuantumSim is 7-8x faster than QuTiP on this problem; four threads add
+another 1.8x-3.4x, more as the trajectory count grows.
+
+Historical Snapshots
+--------------------
+
+The sections below were measured on an Apple M1 with ``0.1.0a2`` to
+``0.1.0a6``, before the solver health checks and the waiting-time Monte Carlo
+stepper. They are kept for comparison and should not be quoted for the current
+code.
+
 .. image:: _static/benchmarks/readme_benchmark_summary.png
-   :alt: OpenQuantumSim benchmark summary comparing deterministic QuTiP speedups and MCWF backend threading.
+   :alt: Historical Apple M1 benchmark summary comparing deterministic QuTiP speedups and MCWF backend threading.
 
 Benchmark Environment
 ---------------------
@@ -273,10 +427,9 @@ Monte Carlo Wave Functions: OpenQuantumSim vs QuTiP
 .. note::
 
    The numbers in this section were measured with the fixed-step trajectory
-   stepper used up to ``0.1.0a6``. Later releases use the waiting-time
-   algorithm on an adaptive integrator, where ``--max-step`` only caps the
-   step size. These timings have not been re-measured with the new stepper
-   and should not be quoted for it.
+   stepper used up to ``0.1.0a6``, with OpenQuantumSim on four threads
+   against serial QuTiP at different tolerances. See the Current Snapshot
+   above for the waiting-time stepper with matched tolerances.
 
 Command:
 

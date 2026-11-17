@@ -34,14 +34,19 @@ sweep summaries, and matplotlib plotting on the Python side.
 
 ## Performance
 
-On the current Apple M1 benchmark snapshot, OpenQuantumSim is 1.3x-2.6x faster
-than QuTiP on deterministic Lindblad reference cases up to Hilbert dimension 80.
-For a qubit MCWF trajectory scaling smoke test, OpenQuantumSim is 5.0x-10.4x
-faster end-to-end than QuTiP, with 9.7x-19.7x faster Julia backend trajectory
-aggregation when using four Julia threads. The benchmark commands and
-environment are documented so these numbers can be reproduced and challenged.
+Measured on an AMD Ryzen 5 5600X with both libraries at the same tolerances,
+and with every result checked for accuracy:
 
-![OpenQuantumSim benchmark summary](https://raw.githubusercontent.com/mohammadjafariph/OpenQuantumSimulation/main/docs/_static/benchmarks/readme_benchmark_summary.png)
+- **Lindblad master equation:** OpenQuantumSim is 1.7x-2.3x faster than QuTiP
+  up to Hilbert dimension 20, and on par at dimensions 40-80.
+- **Monte Carlo trajectories** (qubit decay, 200-5000 trajectories):
+  OpenQuantumSim is 6.7x-8.3x faster than QuTiP on one Julia thread, and
+  12x-26x faster on four threads, against QuTiP's serial default.
+
+These are small reference problems; larger systems and other workloads will
+behave differently. The commands, environment and full tables are on the
+[performance page](https://mohammadjafariph.github.io/OpenQuantumSimulation/performance.html)
+so the numbers can be reproduced and challenged.
 
 Documentation: https://mohammadjafariph.github.io/OpenQuantumSimulation/
 

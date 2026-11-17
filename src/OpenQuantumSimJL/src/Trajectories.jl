@@ -35,14 +35,20 @@ function _trajectory_rng(base_seed::UInt64, traj_idx::Integer)::Xoshiro
     return Xoshiro(words[1], words[2], words[3], words[4])
 end
 
+# `seed = FRESH_SEED` asks for a fresh seed. Every non-negative integer,
+# including 0, is an ordinary reproducible seed.
+const FRESH_SEED = -1
+
 """
-Resolve the user-facing `seed` to the base seed of a run. `seed = 0` asks for
-a fresh seed from the operating system; the value actually used is reported
-in `solver_stats.base_seed` so the run can be repeated.
+Resolve the user-facing `seed` to the base seed of a run. `seed = -1`
+(`FRESH_SEED`) asks for a fresh seed from the operating system; the value
+actually used is reported in `solver_stats.base_seed` so the run can be
+repeated. Any non-negative `seed`, including 0, is used as given.
 """
 function _resolve_base_seed(seed::Integer)::UInt64
-    seed < 0 && throw(ArgumentError("seed must be non-negative."))
-    seed == 0 && return rand(RandomDevice(), UInt64(1):UInt64(typemax(Int64)))
+    seed == FRESH_SEED &&
+        return rand(RandomDevice(), UInt64(0):UInt64(typemax(Int64)))
+    seed < 0 && throw(ArgumentError("seed must be non-negative, or -1 for a fresh seed."))
     return UInt64(seed)
 end
 
@@ -545,7 +551,7 @@ end
 Run one quantum-jump trajectory.
 
 `max_step = 0` (the default) leaves the adaptive step unbounded; a positive
-value caps it. `seed = 0` draws a fresh seed.
+value caps it. `seed = -1` (the default) draws a fresh seed.
 """
 function single_trajectory(
     H,
@@ -553,7 +559,7 @@ function single_trajectory(
     tlist,
     c_ops = Matrix{ComplexF64}[],
     e_ops = Matrix{ComplexF64}[],
-    seed::Integer = 0,
+    seed::Integer = FRESH_SEED,
     max_step::Real = 0.0,
     save_states::Bool = false,
     rtol::Real = 1e-8,
@@ -634,7 +640,7 @@ function mcsolve(
     c_ops = Matrix{ComplexF64}[],
     e_ops = Matrix{ComplexF64}[],
     n_traj::Integer = 500,
-    seed::Integer = 0,
+    seed::Integer = FRESH_SEED,
     max_step::Real = 0.0,
     n_jobs::Integer = 1,
     checkpoint_file::AbstractString = "",

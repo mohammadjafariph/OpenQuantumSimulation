@@ -71,11 +71,19 @@ def test_benchmark_mode_uses_batches(
     )
     times = np.linspace(0.0, 0.2, 3)
 
-    row, signature = bench._benchmark_mode(args, times, 2, None)
+    row, signatures = bench._benchmark_mode(args, times, 2, None)
 
     assert calls == [(3, 2), (3, 2)]
     assert row["n_jobs"] == 2
     assert row["workers"] == 2
     assert row["trajectories_per_second"] > 0
     assert row["seconds_per_trajectory"] > 0
-    assert signature > 0
+    assert len(signatures) == 2
+    assert all(signature > 0 for signature in signatures)
+
+    # Each repeat is compared with the reference run of the same repeat, so
+    # identical results give zero difference even though repeats differ.
+    same, _ = bench._benchmark_mode(args, times, 2, signatures)
+    shifted, _ = bench._benchmark_mode(args, times, 2, [s + 1.0 for s in signatures])
+    assert same["signature_delta"] == 0.0
+    assert shifted["signature_delta"] == pytest.approx(1.0)

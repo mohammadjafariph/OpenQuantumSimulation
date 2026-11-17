@@ -36,12 +36,12 @@ def main() -> None:
     _warm_up(args, times)
     rows: list[dict[str, Any]] = []
     serial_elapsed: float | None = None
-    reference_signature: float | None = None
+    reference_signatures: list[float] | None = None
     for n_jobs in args.n_jobs:
-        row, signature = _benchmark_mode(args, times, n_jobs, reference_signature)
+        row, signatures = _benchmark_mode(args, times, n_jobs, reference_signatures)
         if n_jobs == 1:
             serial_elapsed = float(row["elapsed_s"])
-            reference_signature = signature
+            reference_signatures = signatures
             row["speedup_vs_serial"] = 1.0
         elif serial_elapsed is not None:
             row["speedup_vs_serial"] = serial_elapsed / float(row["elapsed_s"])
@@ -80,7 +80,12 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--n-traj", type=int, default=20)
     parser.add_argument("--time-points", type=int, default=101)
     parser.add_argument("--t-final", type=float, default=1.0)
-    parser.add_argument("--max-step", type=float, default=0.01)
+    parser.add_argument(
+        "--max-step",
+        type=float,
+        default=None,
+        help="Optional cap on the adaptive integrator step (default: no cap).",
+    )
     parser.add_argument("--batch-size", type=int, default=5)
     parser.add_argument("--repeats", type=int, default=3)
     parser.add_argument("--seed", type=int, default=2026)
@@ -116,7 +121,7 @@ def _parse_args() -> argparse.Namespace:
         parser.error("--time-points must be greater than 1")
     if args.t_final <= 0:
         parser.error("--t-final must be positive")
-    if args.max_step <= 0:
+    if args.max_step is not None and args.max_step <= 0:
         parser.error("--max-step must be positive")
     if args.batch_size <= 0:
         parser.error("--batch-size must be positive")
@@ -153,11 +158,17 @@ def _benchmark_mode(
     args: argparse.Namespace,
     times: np.ndarray[Any, np.dtype[np.float64]],
     n_jobs: int,
-    reference_signature: float | None,
-) -> tuple[dict[str, Any], float]:
+    reference_signatures: list[float] | None,
+) -> tuple[dict[str, Any], list[float]]:
+    """Time one job mode.
+
+    Each repeat uses its own seed. ``signature_delta`` compares every repeat
+    with the serial run of the same seed, so it is zero when the result does
+    not depend on how trajectories are split between workers.
+    """
     elapsed_values: list[float] = []
     signature_delta = 0.0
-    latest_signature: float | None = None
+    signatures: list[float] = []
     effective_jobs = _effective_n_jobs(n_jobs)
     batch_ranges = mi_runner._trajectory_batches(0, args.n_traj, args.batch_size)
     worker_count = min(effective_jobs, len(batch_ranges))
@@ -181,14 +192,14 @@ def _benchmark_mode(
         elapsed = time.perf_counter() - started
         elapsed_values.append(elapsed)
 
-        latest_signature = _signature(results)
-        if reference_signature is not None:
+        signatures.append(_signature(results))
+        if reference_signatures is not None:
             signature_delta = max(
                 signature_delta,
-                abs(latest_signature - reference_signature),
+                abs(signatures[-1] - reference_signatures[repeat]),
             )
 
-    if latest_signature is None:
+    if not signatures:
         msg = "benchmark did not run any repeats"
         raise RuntimeError(msg)
 
@@ -203,7 +214,7 @@ def _benchmark_mode(
         "speedup_vs_serial": None,
         "signature_delta": signature_delta,
     }
-    return row, latest_signature
+    return row, signatures
 
 
 def _run_requests(

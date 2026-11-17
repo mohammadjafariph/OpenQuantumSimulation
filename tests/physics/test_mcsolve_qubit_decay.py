@@ -413,3 +413,59 @@ def test_mcsolve_progress_flag_does_not_change_results() -> None:
     assert np.allclose(quiet.expect[0], noisy.expect[0])
     assert np.allclose(quiet.expect_std[0], noisy.expect_std[0])
     assert np.allclose(quiet.expect_stderr[0], noisy.expect_stderr[0])
+
+
+@pytest.mark.physics
+@pytest.mark.parametrize("seed", [0, 1])
+def test_every_explicit_seed_is_reproducible(seed: int) -> None:
+    # Seed 0 used to be read as "draw a fresh seed", so Options(seed=0)
+    # silently gave a different answer on every run.
+    import openquantumsim as oqs
+
+    atom = oqs.SpinSpace(0.5, label="atom")
+    excited = oqs.basis(atom, "up")
+    projector = oqs.Operator(oqs.ket2dm(excited), atom, "P_excited")
+    times = np.linspace(0.0, 2.0, 11)
+
+    def run() -> oqs.Result:
+        return oqs.mcsolve(
+            0.0 * oqs.sigmaz(atom),
+            excited,
+            times,
+            c_ops=[np.sqrt(0.5) * oqs.sigmam(atom)],
+            e_ops=[projector],
+            n_traj=40,
+            options=oqs.Options(seed=seed),
+        )
+
+    first, second = run(), run()
+
+    assert first.solver_stats["base_seed"] == seed
+    assert np.array_equal(first.expect[0], second.expect[0])
+
+
+@pytest.mark.physics
+def test_missing_seed_draws_a_fresh_reported_seed() -> None:
+    import openquantumsim as oqs
+
+    atom = oqs.SpinSpace(0.5, label="atom")
+    excited = oqs.basis(atom, "up")
+    times = np.linspace(0.0, 1.0, 5)
+
+    def run(seed: int | None) -> oqs.Result:
+        return oqs.single_trajectory(
+            0.0 * oqs.sigmaz(atom),
+            excited,
+            times,
+            c_ops=[oqs.sigmam(atom)],
+            options=oqs.Options(seed=seed),
+        )
+
+    fresh = [run(None).solver_stats["base_seed"] for _ in range(3)]
+
+    assert len(set(fresh)) == 3
+    assert all(base_seed >= 0 for base_seed in fresh)
+    assert run(None).solver_stats["seed"] is None
+    # The reported seed reproduces the run.
+    repeat = run(fresh[0])
+    assert repeat.solver_stats["base_seed"] == fresh[0]

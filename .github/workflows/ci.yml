@@ -127,6 +127,10 @@ jobs:
   julia-backend:
     name: Julia backend tests (Julia ${{ matrix.julia-version }})
     runs-on: ubuntu-latest
+    env:
+      # Two threads, so the threaded paths (trajectories, large sparse
+      # products) are exercised and must give the same answers.
+      JULIA_NUM_THREADS: "2"
     strategy:
       fail-fast: false
       matrix:

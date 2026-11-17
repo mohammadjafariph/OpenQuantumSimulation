@@ -66,7 +66,12 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--time-points", type=int, default=41)
     parser.add_argument("--t-final", type=float, default=4.0)
     parser.add_argument("--gamma", type=float, default=0.35)
-    parser.add_argument("--max-step", type=float, default=0.01)
+    parser.add_argument(
+        "--max-step",
+        type=float,
+        default=None,
+        help="Optional cap on the adaptive integrator step (default: no cap).",
+    )
     parser.add_argument("--checkpoint-every", type=int, default=100)
     parser.add_argument("--seed", type=int, default=2026)
     parser.add_argument("--n-jobs", type=int, default=-1)
@@ -82,7 +87,7 @@ def _parse_args() -> argparse.Namespace:
         parser.error("--t-final must be positive")
     if args.gamma < 0:
         parser.error("--gamma must be non-negative")
-    if args.max_step <= 0:
+    if args.max_step is not None and args.max_step <= 0:
         parser.error("--max-step must be positive")
     if args.checkpoint_every <= 0:
         parser.error("--checkpoint-every must be positive")

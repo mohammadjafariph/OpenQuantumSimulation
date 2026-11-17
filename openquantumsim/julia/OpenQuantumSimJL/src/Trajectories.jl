@@ -35,14 +35,20 @@ function _trajectory_rng(base_seed::UInt64, traj_idx::Integer)::Xoshiro
     return Xoshiro(words[1], words[2], words[3], words[4])
 end
 
+# `seed = FRESH_SEED` asks for a fresh seed. Every non-negative integer,
+# including 0, is an ordinary reproducible seed.
+const FRESH_SEED = -1
+
 """
-Resolve the user-facing `seed` to the base seed of a run. `seed = 0` asks for
-a fresh seed from the operating system; the value actually used is reported
-in `solver_stats.base_seed` so the run can be repeated.
+Resolve the user-facing `seed` to the base seed of a run. `seed = -1`
+(`FRESH_SEED`) asks for a fresh seed from the operating system; the value
+actually used is reported in `solver_stats.base_seed` so the run can be
+repeated. Any non-negative `seed`, including 0, is used as given.
 """
 function _resolve_base_seed(seed::Integer)::UInt64
-    seed < 0 && throw(ArgumentError("seed must be non-negative."))
-    seed == 0 && return rand(RandomDevice(), UInt64(1):UInt64(typemax(Int64)))
+    seed == FRESH_SEED &&
+        return rand(RandomDevice(), UInt64(0):UInt64(typemax(Int64)))
+    seed < 0 && throw(ArgumentError("seed must be non-negative, or -1 for a fresh seed."))
     return UInt64(seed)
 end
 
@@ -51,7 +57,7 @@ function _as_complex_vector(vector)::Vector{ComplexF64}
 end
 
 function _validate_mcsolve_inputs(
-    H::Matrix{ComplexF64},
+    H::AbstractMatrix{ComplexF64},
     psi0::Vector{ComplexF64},
     times::Vector{Float64},
     n_traj::Int,
@@ -83,12 +89,12 @@ function _sample_weighted(rng::AbstractRNG, weights::Vector{Float64})::Int
 end
 
 function _effective_hamiltonian(
-    H::Matrix{ComplexF64},
-    c_ops::Vector{Matrix{ComplexF64}},
+    H::AbstractMatrix{ComplexF64},
+    c_ops::AbstractVector{<:AbstractMatrix{ComplexF64}},
 )
     h_eff = copy(H)
     for c in c_ops
-        h_eff .-= 0.5im .* (c' * c)
+        h_eff = h_eff - 0.5im * (c' * c)
     end
     return h_eff
 end
@@ -99,9 +105,11 @@ mutable struct _JumpState
     n_jumps::Int
 end
 
-struct _MCWFParams
-    generator::Matrix{ComplexF64}    # -i H_eff
-    c_ops::Vector{Matrix{ComplexF64}}
+# The operators are dense or sparse (see `_prepare_trajectory_operators`);
+# the type parameters keep the integrator's hot loop type-stable either way.
+struct _MCWFParams{G<:AbstractMatrix{ComplexF64}, C<:AbstractMatrix{ComplexF64}}
+    generator::G    # -i H_eff
+    c_ops::Vector{C}
     jump::_JumpState
     weights::Vector{Float64}
     buffer::Vector{ComplexF64}
@@ -137,8 +145,8 @@ function _mcwf_jump!(integrator)
 end
 
 function _mcwf_integrator(
-    H::Matrix{ComplexF64},
-    c_ops::Vector{Matrix{ComplexF64}},
+    H::AbstractMatrix{ComplexF64},
+    c_ops::AbstractVector{<:AbstractMatrix{ComplexF64}},
     psi0::Vector{ComplexF64},
     times::Vector{Float64};
     rtol::Float64,
@@ -188,7 +196,7 @@ function _run_trajectory!(
     integrator,
     psi0::Vector{ComplexF64},
     times::Vector{Float64},
-    e_ops::Vector{Matrix{ComplexF64}},
+    e_ops::AbstractVector{<:AbstractMatrix{ComplexF64}},
     rng::Xoshiro,
 )
     save_states = size(states_out, 2) > 0
@@ -282,7 +290,7 @@ function _run_trajectory_chunk!(
     base_seed::UInt64,
     psi0::Vector{ComplexF64},
     times::Vector{Float64},
-    e_ops::Vector{Matrix{ComplexF64}},
+    e_ops::AbstractVector{<:AbstractMatrix{ComplexF64}},
 )
     tally = _TrajectoryTally()
     no_states = Matrix{ComplexF64}(undef, length(psi0), 0)
@@ -332,12 +340,27 @@ function _hash_array!(io::IO, name::AbstractString, array::AbstractArray)
     return io
 end
 
+# Operators are hashed in one canonical sparse form, so the hash does not
+# depend on whether a run stored them dense or sparse.
+function _hash_array!(io::IO, name::AbstractString, matrix::AbstractMatrix)
+    canonical = dropzeros!(SparseMatrixCSC{ComplexF64, Int64}(sparse(matrix)))
+    write(io, name)
+    write(io, "\nsparse ")
+    write(io, string(size(canonical)))
+    write(io, "\n")
+    write(io, reinterpret(UInt8, canonical.colptr))
+    write(io, reinterpret(UInt8, canonical.rowval))
+    write(io, reinterpret(UInt8, canonical.nzval))
+    write(io, "\n")
+    return io
+end
+
 function _mcsolve_config_hash(
-    H::Matrix{ComplexF64},
+    H::AbstractMatrix{ComplexF64},
     psi0::Vector{ComplexF64},
     times::Vector{Float64},
-    c_ops::Vector{Matrix{ComplexF64}},
-    e_ops::Vector{Matrix{ComplexF64}},
+    c_ops::AbstractVector{<:AbstractMatrix{ComplexF64}},
+    e_ops::AbstractVector{<:AbstractMatrix{ComplexF64}},
     max_step::Float64,
     rtol::Float64,
     atol::Float64,
@@ -527,25 +550,43 @@ function _report_mcsolve_progress(
     return nothing
 end
 
+# Trajectories keep operators sparse when the Hilbert space is large enough for
+# it to matter and the operators are mostly zero; small or dense operators are
+# faster as dense matrices (BLAS). The choice never changes the result.
+const MCWF_SPARSE_MIN_DIM = 32
+const MCWF_SPARSE_MAX_DENSITY = 0.1
+
 function _prepare_trajectory_operators(H, c_ops, e_ops)
-    Hc = _as_complex_matrix(H)
-    d = size(Hc, 1)
-    collapse_ops = _as_complex_matrices(c_ops)
-    expectation_ops = _as_complex_matrices(e_ops)
+    Hs = _as_complex_operator(H)
+    d = size(Hs, 1)
+    size(Hs, 2) == d || throw(DimensionMismatch("Hamiltonian must be square."))
+    collapse_ops = _as_complex_operators(c_ops)
+    expectation_ops = _as_complex_operators(e_ops)
     for c in collapse_ops
         size(c) == (d, d) || throw(DimensionMismatch("collapse operators must match H."))
     end
     for op in expectation_ops
         size(op) == (d, d) || throw(DimensionMismatch("expectation operators must match H."))
     end
-    return Hc, collapse_ops, expectation_ops
+
+    mostly_zero(op) = nnz(op) <= MCWF_SPARSE_MAX_DENSITY * d^2
+    large = d >= MCWF_SPARSE_MIN_DIM
+    dense_all(ops) = Matrix{ComplexF64}[Matrix(op) for op in ops]
+    if large && mostly_zero(Hs) && all(mostly_zero, collapse_ops)
+        H_out, collapse_out = Hs, collapse_ops
+    else
+        H_out, collapse_out = Matrix(Hs), dense_all(collapse_ops)
+    end
+    expectation_out = large && all(mostly_zero, expectation_ops) ?
+        expectation_ops : dense_all(expectation_ops)
+    return H_out, collapse_out, expectation_out
 end
 
 """
 Run one quantum-jump trajectory.
 
 `max_step = 0` (the default) leaves the adaptive step unbounded; a positive
-value caps it. `seed = 0` draws a fresh seed.
+value caps it. `seed = -1` (the default) draws a fresh seed.
 """
 function single_trajectory(
     H,
@@ -553,7 +594,7 @@ function single_trajectory(
     tlist,
     c_ops = Matrix{ComplexF64}[],
     e_ops = Matrix{ComplexF64}[],
-    seed::Integer = 0,
+    seed::Integer = FRESH_SEED,
     max_step::Real = 0.0,
     save_states::Bool = false,
     rtol::Real = 1e-8,
@@ -634,7 +675,7 @@ function mcsolve(
     c_ops = Matrix{ComplexF64}[],
     e_ops = Matrix{ComplexF64}[],
     n_traj::Integer = 500,
-    seed::Integer = 0,
+    seed::Integer = FRESH_SEED,
     max_step::Real = 0.0,
     n_jobs::Integer = 1,
     checkpoint_file::AbstractString = "",

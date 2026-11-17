@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import openquantumsim._julia_bridge as bridge
 import openquantumsim.cli as cli
 
 
@@ -88,3 +89,104 @@ def test_validate_sysimage_uses_juliacall_subprocess(
     assert env[cli.USE_SYSIMAGE_ENV] == "0"
     assert env["JULIA_PYTHONCALL_EXE"] == sys.executable
     assert env["PYTHON_JULIACALL_HANDLE_SIGNALS"] == "yes"
+
+
+def _fake_julia_toolchain(monkeypatch: Any, calls: dict[str, Any]) -> None:
+    monkeypatch.setattr(cli, "_juliapkg_executable", lambda: "/usr/bin/julia")
+    monkeypatch.setattr(
+        cli,
+        "_julia_query",
+        lambda _julia, expression: "so" if "Libdl.dlext" in expression else "1.11.9",
+    )
+
+    def fake_run_julia(julia: str, script: str) -> None:
+        calls["julia"] = julia
+        calls["script"] = script
+
+    monkeypatch.setattr(cli, "_run_julia", fake_run_julia)
+    monkeypatch.setattr(
+        cli,
+        "_validate_sysimage",
+        lambda sysimage: calls.setdefault("validated", sysimage),
+    )
+
+
+def test_build_sysimage_builds_validates_and_registers(
+    monkeypatch: Any,
+    tmp_path: Path,
+    capsys: Any,
+) -> None:
+    calls: dict[str, Any] = {}
+    _fake_julia_toolchain(monkeypatch, calls)
+    monkeypatch.setenv(bridge.CACHE_DIR_ENV, str(tmp_path / "cache"))
+    sysimage = tmp_path / "out" / "image.so"
+
+    status = cli.main(
+        ["build-sysimage", "--output", str(sysimage), "--cpu-target", "generic"],
+    )
+
+    assert status == 0
+    assert calls["julia"] == "/usr/bin/julia"
+    assert 'cpu_target="generic"' in calls["script"]
+    assert "precompile_execution_file" in calls["script"]
+    assert calls["validated"] == sysimage.resolve()
+    output = capsys.readouterr().out
+    assert "Future solver calls will use this sysimage automatically." in output
+    metadata = bridge.read_sysimage_metadata()
+    assert metadata is not None
+    assert metadata["julia_version"] == "1.11.9"
+    assert metadata["sysimage_path"] == str(sysimage.resolve())
+
+
+def test_build_sysimage_without_workload_can_keep_build_dir(
+    monkeypatch: Any,
+    tmp_path: Path,
+    capsys: Any,
+) -> None:
+    calls: dict[str, Any] = {}
+    _fake_julia_toolchain(monkeypatch, calls)
+    monkeypatch.setenv(bridge.CACHE_DIR_ENV, str(tmp_path / "cache"))
+
+    status = cli.main(
+        [
+            "build-sysimage",
+            "--output",
+            str(tmp_path / "image.so"),
+            "--no-precompile-workload",
+            "--keep-build-dir",
+        ],
+    )
+
+    assert status == 0
+    assert "precompile_execution_file" not in calls["script"]
+    assert "Kept build directory" in capsys.readouterr().out
+
+
+def test_main_without_a_command_prints_help(capsys: Any) -> None:
+    assert cli.main([]) == 1
+    assert "usage: oqs" in capsys.readouterr().out
+
+
+def test_julia_helpers_run_subprocesses(monkeypatch: Any) -> None:
+    seen: list[tuple[list[str], dict[str, Any]]] = []
+
+    class Completed:
+        stdout = " 1.11.9\n"
+
+    def fake_run(command: list[str], **kwargs: Any) -> Completed:
+        seen.append((command, kwargs))
+        return Completed()
+
+    monkeypatch.setattr(cli.subprocess, "run", fake_run)
+
+    assert cli._julia_query("/usr/bin/julia", "print(VERSION)") == "1.11.9"
+    cli._run_julia("/usr/bin/julia", "1 + 1")
+
+    assert seen[0][0] == ["/usr/bin/julia", "--startup-file=no", "-e", "print(VERSION)"]
+    assert seen[1][1]["env"]["JULIA_PYTHONCALL_EXE"]
+
+
+def test_julia_string_escapes_windows_paths_and_quotes() -> None:
+    assert cli._julia_string(Path("C:/a b/c")) == '"C:/a b/c"'
+    # Quotes and backslashes must be escaped inside a Julia string literal.
+    assert cli._julia_string(r'say "hi" \n') == r'"say \"hi\" \\n"'

@@ -1,17 +1,3 @@
-function liouvillian(H::AbstractMatrix{ComplexF64}, c_ops::Vector)
-    d = size(H, 1)
-    size(H, 2) == d || throw(DimensionMismatch("Hamiltonian must be square."))
-    I_d = eye(d)
-    L = -1im * (kron(I_d, H) - kron(transpose(H), I_d))
-    for c in c_ops
-        cdgc = c' * c
-        L += kron(conj(c), c)
-        L -= 0.5 * kron(I_d, cdgc)
-        L -= 0.5 * kron(transpose(cdgc), I_d)
-    end
-    return sparse(L)
-end
-
 function _as_complex_matrix(matrix)::Matrix{ComplexF64}
     return Matrix{ComplexF64}(ComplexF64.(matrix))
 end
@@ -77,7 +63,7 @@ function mesolve(
         size(op) == (d, d) || throw(DimensionMismatch("expectation operators must match H."))
     end
 
-    L = liouvillian(Hc, collapse_ops)
+    L = liouvillian_operator(Hc, collapse_ops)
     u0 = vec(copy(rho0c))
     requested_method, method_name, ode_solver_name = _resolve_method(method, ode_solver)
 
@@ -139,6 +125,7 @@ function _solve_liouvillian(
 )
     local sol_u, report
     elapsed = @elapsed begin
+        L = _matvec_operator(L)
         if method_name == "krylov"
             sol_u, report = _solve_krylov_at_times(
                 L,

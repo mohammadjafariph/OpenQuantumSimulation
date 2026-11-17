@@ -9,79 +9,115 @@ function _br_spectrum_value(spectrum, omega::Real)::Float64
     return Float64(value)
 end
 
+"""
+Group the transition pairs `(m, n)` by their Bohr frequency `E_m - E_n`.
+
+The frequencies are sorted once, and a group collects every frequency within
+`tol` of the group's first one, so this costs O(d^2 log d) instead of
+comparing each pair with every group found so far.
+"""
 function _br_channel_groups(energies::Vector{Float64})::Vector{Vector{Tuple{Int,Int}}}
-    """Group eigenvalue-transition pairs by their Bohr frequency."""
-    groups = Vector{Tuple{Int,Int}}[]
-    omegas = Float64[]
+    d = length(energies)
+    pairs = Tuple{Int,Int}[(m, n) for n in 1:d for m in 1:d]
+    omegas = Float64[energies[m] - energies[n] for (m, n) in pairs]
     tol = 1e-10 * max(1.0, maximum(abs, energies) + abs(minimum(energies)))
-    for m in eachindex(energies), n in eachindex(energies)
-        omega = energies[m] - energies[n]
-        placed = false
-        for idx in eachindex(omegas)
-            if abs(omega - omegas[idx]) <= tol
-                push!(groups[idx], (m, n))
-                placed = true
-                break
-            end
+    groups = Vector{Tuple{Int,Int}}[]
+    group_start = 0.0
+    for idx in sortperm(omegas)
+        if isempty(groups) || omegas[idx] - group_start > tol
+            push!(groups, Tuple{Int,Int}[])
+            group_start = omegas[idx]
         end
-        if !placed
-            push!(groups, [(m, n)])
-            push!(omegas, omega)
-        end
+        push!(groups[end], pairs[idx])
     end
     return groups
 end
 
-function br_liouvillian(H::AbstractMatrix{ComplexF64}, a_ops, spectra)
-    """Secular Bloch-Redfield generator for `(operator, spectrum)` couplings.
-
-    Each spectrum maps a Bohr frequency to the dissipator weight gamma;
-    a constant gamma g is equivalent to a Lindblad collapse operator
-    sqrt(g) * A. The secular approximation groups transitions with equal
-    Bohr frequencies into single channels.
-    """
-    d = size(H, 1)
-    size(H, 2) == d || throw(DimensionMismatch("Hamiltonian must be square."))
+"""Energies and eigenvectors of a Hermitian Hamiltonian."""
+function _br_eigenbasis(H::AbstractMatrix)
     H_dense = Matrix{ComplexF64}(H)
     norm(H_dense - H_dense') <= 1e-10 * max(1.0, norm(H_dense)) ||
         throw(ArgumentError("Hamiltonian must be Hermitian."))
-
     factorization = eigen(Hermitian(H_dense))
-    energies = Float64.(factorization.values)
-    U = Matrix{ComplexF64}(factorization.vectors)
+    return Float64.(factorization.values), Matrix{ComplexF64}(factorization.vectors)
+end
 
-    identity = Matrix{ComplexF64}(I, d, d)
+"""
+Secular Bloch-Redfield generator in the energy eigenbasis, as a sparse
+operator applied row by row.
+
+In the eigenbasis the coherent part is diagonal, `-i (E_m - E_n)` on
+`rho_mn`, and each Bohr-frequency channel `A(omega)` is a sparse matrix with
+one entry per transition in the group. The generator therefore has O(d^2)
+entries for a nondegenerate spectrum instead of the d^4 of a dense matrix.
+"""
+function _br_eigenbasis_generator(energies::Vector{Float64}, U::Matrix{ComplexF64}, a_ops, spectra)
+    d = length(energies)
     length(a_ops) == length(spectra) ||
         throw(DimensionMismatch("a_ops and spectra must have equal length."))
-    L = zeros(ComplexF64, d * d, d * d)
+    rows = Int64[]
+    cols = Int64[]
+    vals = ComplexF64[]
+    for n in 1:d, m in 1:d
+        index = (n - 1) * d + m
+        push!(rows, index)
+        push!(cols, index)
+        push!(vals, -1im * (energies[m] - energies[n]))
+    end
+
+    identity = SparseMatrixCSC{ComplexF64, Int64}(I, d, d)
+    groups = _br_channel_groups(energies)
     for (a_index, a_raw) in enumerate(a_ops)
-        spectrum = spectra[a_index]
         A = Matrix{ComplexF64}(a_raw)
-        size(A) == (d, d) ||
-            throw(DimensionMismatch("coupling operators must match H."))
+        size(A) == (d, d) || throw(DimensionMismatch("coupling operators must match H."))
         B = U' * A * U
-        for group in _br_channel_groups(energies)
-            channel = zeros(ComplexF64, d, d)
-            for (m, n) in group
-                channel[m, n] = B[m, n]
-            end
-            gamma = _br_spectrum_value(spectrum, energies[group[1][1]] - energies[group[1][2]])
+        for group in groups
+            m1, n1 = group[1]
+            gamma = _br_spectrum_value(spectra[a_index], energies[m1] - energies[n1])
             iszero(gamma) && continue
-            cdgc = channel' * channel
-            L += gamma .* (
-                kron(conj(channel), channel) .-
-                0.5 .* kron(identity, cdgc) .-
-                0.5 .* kron(transpose(cdgc), identity)
+            channel = dropzeros!(sparse(
+                Int[m for (m, _) in group],
+                Int[n for (_, n) in group],
+                ComplexF64[B[m, n] for (m, n) in group],
+                d,
+                d,
+            ))
+            nnz(channel) == 0 && continue
+            decay = channel' * channel
+            _append_kron!(rows, cols, vals, conj(channel), channel, ComplexF64(gamma))
+            _append_kron!(rows, cols, vals, identity, decay, ComplexF64(-gamma / 2))
+            _append_kron!(
+                rows,
+                cols,
+                vals,
+                SparseMatrixCSC{ComplexF64, Int64}(transpose(decay)),
+                identity,
+                ComplexF64(-gamma / 2),
             )
         end
     end
+    return RowMajorOperator(sparse(cols, rows, vals, d * d, d * d))
+end
 
-    # Transform the eigenbasis generator to the computational basis:
+"""
+Secular Bloch-Redfield generator for `(operator, spectrum)` couplings, in the
+computational basis, as a dense matrix acting on column-stacked states.
+
+Each spectrum maps a Bohr frequency to the dissipator weight gamma. A
+constant gamma g matches a Lindblad collapse operator sqrt(g) * A only when A
+connects a single Bohr frequency; otherwise the secular approximation drops
+the cross terms between frequencies.
+The secular approximation groups transitions with equal Bohr frequencies into
+single channels. `brmesolve` does not use this matrix: it propagates in the
+eigenbasis, which is far cheaper for anything but small systems.
+"""
+function br_liouvillian(H::AbstractMatrix{ComplexF64}, a_ops, spectra)
+    size(H, 1) == size(H, 2) || throw(DimensionMismatch("Hamiltonian must be square."))
+    energies, U = _br_eigenbasis(H)
+    eigenbasis = Matrix(sparse(_br_eigenbasis_generator(energies, U, a_ops, spectra)))
     # vec(U rho U') = (conj(U) (x) U) vec(rho).
     T = kron(conj(U), U)
-    L = T * L * T'
-    L += -1im .* (kron(identity, H) .- kron(transpose(H), identity))
-    return L
+    return T * eigenbasis * T'
 end
 
 function brmesolve(
@@ -111,8 +147,14 @@ function brmesolve(
 
     requested_method, method_name, ode_solver_name = _resolve_method(method, ode_solver)
 
-    L = br_liouvillian(Hc, a_ops, spectra)
-    u0 = vec(copy(rho0c))
+    # Propagate in the energy eigenbasis, where the secular generator is
+    # sparse, and rotate only the outputs. Trace, Hermiticity, eigenvalues and
+    # entropy do not depend on the basis, so the health checks and entropy are
+    # computed on the eigenbasis states directly.
+    energies, U = _br_eigenbasis(Hc)
+    L = _br_eigenbasis_generator(energies, U, a_ops, spectra)
+    u0 = vec(U' * rho0c * U)
+    eigenbasis_e_ops = Matrix{ComplexF64}[U' * Matrix(op) * U for op in expectation_ops]
     sol_u, report, elapsed = _solve_liouvillian(
         L,
         u0,
@@ -124,11 +166,11 @@ function brmesolve(
         ode_solver = ode_solver_name,
     )
 
-    return _collect_solution(
+    collected = _collect_solution(
         sol_u,
         times,
         d,
-        expectation_ops;
+        eigenbasis_e_ops;
         save_states = save_states,
         compute_entropy = compute_entropy,
         elapsed = elapsed,
@@ -137,4 +179,9 @@ function brmesolve(
         requested_method = requested_method,
         krylov_dim = Int(krylov_dim),
     )
+    states = collected.states
+    for idx in axes(states, 3)
+        states[:, :, idx] .= U * states[:, :, idx] * U'
+    end
+    return collected
 end

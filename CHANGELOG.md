@@ -22,7 +22,8 @@ Changed behaviour (read before upgrading):
   differ from earlier releases and no longer depend on `n_jobs` or the thread
   count. `n_jobs` now limits the number of threads instead of meaning "one or
   all". With `seed=None` the seed actually used is reported as
-  `solver_stats["base_seed"]`.
+  `solver_stats["base_seed"]`. Every explicit seed is reproducible:
+  `Options(seed=0)` used to draw a fresh random seed and now means seed 0.
 - Monte Carlo checkpoints use format version 2 and are tied to the tolerances
   and integrator as well as the system. Checkpoints written by earlier
   releases are refused with an explanatory error instead of being resumed.
@@ -46,9 +47,15 @@ Added:
   Julia type name), `JuliaBridgeUnavailable`, `SolverError`,
   `ConvergenceError`, and `SolverHealthWarning`.
 - Health statistics in `Result.solver_stats`: integrator return code, step
-  and rejection counts, Krylov residuals, and the drift of the trace,
-  Hermiticity and smallest eigenvalue of the density matrix. Drift beyond
-  the requested accuracy emits a `SolverHealthWarning`.
+  and rejection counts, Krylov residuals, the drift of the trace and of
+  Hermiticity, and `min_eigenvalue`, the most negative eigenvalue of the
+  density matrix. Drift beyond the requested accuracy emits a
+  `SolverHealthWarning`. Trace and Hermiticity are checked at every output
+  time. Positivity is spot-checked at up to 8 evenly spaced times (4 above
+  Hilbert dimension 64), always including the last, with a Cholesky test;
+  the eigenvalue is only computed for a state that fails it, so
+  `min_eigenvalue` is 0 when every checked state is positive to within
+  `1e-9` of its trace. The checks cost under 10% of a small `mesolve`.
 - `steadystate(..., return_stats=True)` returns the convergence flag and the
   residual `|L rho| / |L|` next to the state.
 - A validation suite of textbook problems with known answers in
@@ -58,15 +65,70 @@ Added:
   the packaged mirror, with `--check` for CI.
 - Time grids are typed to accept NumPy arrays as well as sequences.
 
-Known gaps:
+Performance:
 
-- The Monte Carlo timings in the README and the performance page were
-  measured with the old fixed-step stepper and have not been re-measured.
-- Example and benchmark scripts still pass `--max-step`, which now only caps
-  the adaptive step and can make trajectories slower than necessary.
+- Lindblad generators are assembled once from (row, column, value)
+  triplets instead of by repeated sparse additions, and applied row by row
+  instead of column by column, split across Julia threads for large
+  systems. A dimension-512 spin chain `mesolve` dropped from about 10.7 s to
+  3.7 s on one thread (2.6 s on four); building its generator dropped from
+  2.2 s to 0.4 s. On the sparse spin-chain benchmark OpenQuantumSim went
+  from 0.7x QuTiP's speed to 1.7x-1.9x.
+- `mcsolve` and `single_trajectory` keep the Hamiltonian, collapse and
+  expectation operators sparse when the Hilbert space has dimension 32 or
+  more and the operators are mostly zero: 6x faster at dimension 256 and 7x
+  at 512 on spin chains.
+- Time-dependent `mesolve` integrates a sparse superoperator sum for the
+  same kind of problem instead of multiplying dense matrices: 6x faster at
+  dimension 40 and 10x at 80.
+- `brmesolve` groups transitions by sorting their Bohr frequencies, builds
+  the secular generator sparsely in the energy eigenbasis and propagates
+  there, rotating only the outputs. At dimension 20 it dropped from 1.8 s to
+  3 ms, and at dimension 40 from 54 s to 12 ms; dimension 80 now takes
+  about 70 ms. `br_liouvillian` still returns the computational-basis
+  matrix.
+- Correlation functions with `method="auto"` integrate with the ODE solver
+  instead of Krylov propagation, 2.5-3.6x faster at the same accuracy.
+  Krylov propagation is still available with `method="krylov"`.
+
+Fixed:
+
+- `ParameterSweep` crashed while writing `summary.h5` when a summary column
+  had a value for some points and not others, or mixed numbers and text.
+  Missing numbers are now written as NaN and mixed columns as text.
+- The README, quickstart, theory page and `brmesolve` docstring said a
+  constant Bloch-Redfield spectrum `g` is exactly equivalent to a Lindblad
+  operator `sqrt(g) * A`. That holds only when `A` connects a single Bohr
+  frequency; for `sigmax` on a qubit the secular approximation drops cross
+  terms and the two differ (by about 0.08 in `<sigmax>` for `g = 0.1`).
+
+Scripts and benchmarks:
+
+- `--max-step` is optional in every example, benchmark and helper script and
+  defaults to no cap.
+- `benchmarks/bench_mcsolve.py` and `examples/dicke/bench_mi.py` reported a
+  nonzero "delta" between job modes because they compared runs with
+  different seeds. They now compare runs that share a seed, which is exactly
+  zero for every thread count.
+- `benchmarks/bench_mesolve.py` was a placeholder; it now compares the
+  `mesolve` integrator choices for speed and accuracy.
+- `scripts/run_benchmarks.sh` re-runs every benchmark on the performance
+  page, and `benchmarks/plot_benchmark_summary.py` redraws the summary figure
+  from their JSON reports.
+- `examples/dicke/run_mi_distribution.py` records the trajectory algorithm in
+  its output and refuses to resume a file written by the old fixed-step
+  stepper, so samples from the two algorithms are never mixed.
+- `benchmarks/bench_mcsolve_vs_qutip.py` runs both libraries at the same
+  tolerances, times OpenQuantumSim on one thread and on all threads, checks
+  both against the exact answer, and records the environment.
+- The README and the performance page report new measurements for the
+  current code on an AMD Ryzen 5 5600X; the Apple M1 numbers are kept as a
+  historical snapshot.
 
 Continuous integration:
 
+- The Julia backend job runs with two threads, so the threaded code paths
+  are tested.
 - The physics job installs QuTiP and fails, instead of skipping, when QuTiP
   or the Julia backend is missing, so the reference cross-checks always run.
 - Test coverage is measured and the validation report is attached to each

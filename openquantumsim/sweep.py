@@ -508,12 +508,14 @@ def _write_hdf5_column(group: h5py.Group, key: str, values: list[Any]) -> None:
         group.create_dataset(key, data=np.asarray(values, dtype=np.int64))
     elif all(_is_float_value(value) for value in values):
         group.create_dataset(key, data=np.asarray(values, dtype=np.float64))
+    elif all(value is None or _is_float_value(value) for value in values):
+        # A numeric column that some points did not report: missing is NaN.
+        numbers = [np.nan if value is None else float(value) for value in values]
+        group.create_dataset(key, data=np.asarray(numbers, dtype=np.float64))
     else:
         dtype = h5py.string_dtype(encoding="utf-8")
-        group.create_dataset(
-            key,
-            data=np.asarray([_csv_value(value) for value in values], dtype=dtype),
-        )
+        text = [str(_csv_value(value)) for value in values]
+        group.create_dataset(key, data=np.asarray(text, dtype=dtype))
 
 
 def _is_int_value(value: Any) -> bool:
